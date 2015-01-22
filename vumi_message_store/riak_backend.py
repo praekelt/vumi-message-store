@@ -4,10 +4,13 @@
 Riak backend for message store.
 """
 
+from uuid import uuid4
+
 from twisted.internet.defer import returnValue
 from vumi.persist.model import Manager
 
-from vumi_message_store.models import InboundMessage, OutboundMessage, Event
+from vumi_message_store.models import (
+    Batch, CurrentTag, InboundMessage, OutboundMessage, Event)
 
 
 class MessageStoreRiakBackend(object):
@@ -20,9 +23,61 @@ class MessageStoreRiakBackend(object):
 
     def __init__(self, manager):
         self.manager = manager
+        self.batches = manager.proxy(Batch)
+        self.current_tags = manager.proxy(CurrentTag)
         self.inbound_messages = manager.proxy(InboundMessage)
         self.outbound_messages = manager.proxy(OutboundMessage)
         self.events = manager.proxy(Event)
+
+    @Manager.calls_manager
+    def batch_start(self, tags=(), **metadata):
+        """
+        Create a new batch and store it in Riak.
+        """
+        batch_id = uuid4().get_hex()
+        batch = self.batches(batch_id)
+        batch.tags.extend(tags)
+        for key, value in metadata.iteritems():
+            batch.metadata[key] = value
+        yield batch.save()
+
+        for tag in tags:
+            tag_record = yield self.current_tags.load(tag)
+            if tag_record is None:
+                tag_record = self.current_tags(tag)
+            tag_record.current_batch.set(batch)
+            yield tag_record.save()
+
+        returnValue(batch_id)
+
+    @Manager.calls_manager
+    def batch_done(self, batch_id):
+        """
+        Clear all references to a batch from its tags.
+        """
+        batch = yield self.batches.load(batch_id)
+        tag_keys = yield batch.backlinks.currenttags()
+        for tags_bunch in self.manager.load_all_bunches(CurrentTag, tag_keys):
+            tags = yield tags_bunch
+            for tag in tags:
+                tag.current_batch.set(None)
+                yield tag.save()
+
+    def get_batch(self, batch_id):
+        """
+        Get a Batch model object from Riak.
+        """
+        return self.batches.load(batch_id)
+
+    @Manager.calls_manager
+    def get_tag_info(self, tag):
+        """
+        Get a CurrentTag model object from Riak or create it if it isn't found.
+        """
+        tagmdl = yield self.current_tags.load(tag)
+        if tagmdl is None:
+            tagmdl = yield self.current_tags(tag)
+        returnValue(tagmdl)
 
     @Manager.calls_manager
     def add_inbound_message(self, msg, batch_ids=()):

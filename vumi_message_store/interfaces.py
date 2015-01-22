@@ -8,6 +8,42 @@ thing may implement multiple interfaces.
 from zope.interface import Interface
 
 
+class IMessageStoreBatchManager(Interface):
+    """
+    Interface for a message store batch manager.
+
+    This is for managing tags and batches.
+    """
+
+    def batch_start(tags=(), **metadata):
+        """
+        Create a new message batch.
+
+        :param tags:
+            Sequence of tags to add to the new batch.
+        :param **metadata:
+            Keyword parameters containing batch metadata.
+
+        :returns:
+            The batch identifier for the new batch.
+        """
+
+    def batch_done(batch_id):
+        """
+        Clear all references to a batch from its tags.
+        """
+
+    def get_batch(batch_id):
+        """
+        Get a batch from the message store.
+        """
+
+    def get_tag_info(tag):
+        """
+        Get tag information from the message store.
+        """
+
+
 class IOperationalMessageStore(Interface):
     """
     Interface for an operational message store.

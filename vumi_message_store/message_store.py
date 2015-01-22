@@ -4,8 +4,55 @@
 
 from zope.interface import implementer
 
-from vumi_message_store.interfaces import IOperationalMessageStore
+from vumi_message_store.interfaces import (
+    IOperationalMessageStore, IMessageStoreBatchManager)
 from vumi_message_store.riak_backend import MessageStoreRiakBackend
+
+
+@implementer(IMessageStoreBatchManager)
+class RiakOnlyMessageStoreBatchManager(object):
+    """
+    Message store batch manager.
+
+    This basically just proxies a subset of MessageStoreRiakBackend.
+    """
+
+    def __init__(self, manager):
+        self.manager = manager
+        self.riak_backend = MessageStoreRiakBackend(self.manager)
+
+    def batch_start(self, tags=(), **metadata):
+        """
+        Create a new message batch.
+
+        :param tags:
+            Sequence of tags to add to the new batch.
+        :param **metadata:
+            Keyword parameters containing batch metadata.
+
+        :returns:
+            The batch identifier for the new batch.
+        """
+        return self.riak_backend.batch_start(tags=tags, **metadata)
+
+    def batch_done(self, batch_id):
+        """
+        Clear all references to a batch from its tags.
+        """
+        return self.riak_backend.batch_done(batch_id)
+
+    def get_batch(self, batch_id):
+        """
+        Get a batch from the message store.
+        """
+        return self.riak_backend.get_batch(batch_id)
+
+    def get_tag_info(self, tag):
+        """
+        Get tag information from the message store.
+        """
+        # TODO: accept tuple instead of flat tag?
+        return self.riak_backend.get_tag_info(tag)
 
 
 @implementer(IOperationalMessageStore)
