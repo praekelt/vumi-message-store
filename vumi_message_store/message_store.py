@@ -5,7 +5,7 @@
 from zope.interface import implementer
 
 from vumi_message_store.interfaces import (
-    IOperationalMessageStore, IMessageStoreBatchManager)
+    IMessageStoreBatchManager, IOperationalMessageStore, IQueryMessageStore)
 from vumi_message_store.riak_backend import MessageStoreRiakBackend
 
 
@@ -102,3 +102,58 @@ class RiakOnlyOperationalMessageStore(object):
         Get an event from the message store.
         """
         return self.riak_backend.get_event(event_id)
+
+
+@implementer(IQueryMessageStore)
+class RiakOnlyQueryMessageStore(object):
+    """
+    Query message store that only uses Riak.
+
+    This basically just proxies a subset of MessageStoreRiakBackend.
+    """
+
+    def __init__(self, manager):
+        self.manager = manager
+        self.riak_backend = MessageStoreRiakBackend(self.manager)
+
+    def get_inbound_message(self, msg_id):
+        """
+        Get an inbound message from the message store.
+        """
+        return self.riak_backend.get_inbound_message(msg_id)
+
+    def get_outbound_message(self, msg_id):
+        """
+        Get an outbound message from the message store.
+        """
+        return self.riak_backend.get_outbound_message(msg_id)
+
+    def get_event(self, event_id):
+        """
+        Get an event from the message store.
+        """
+        return self.riak_backend.get_event(event_id)
+
+    def list_batch_inbound_keys(self, batch_id, max_results=None,
+                                continuation=None):
+        """
+        List inbound message keys for the given batch.
+        """
+        return self.riak_backend.list_batch_inbound_keys(
+            batch_id, max_results=max_results, continuation=continuation)
+
+    def list_batch_outbound_keys(self, batch_id, max_results=None,
+                                 continuation=None):
+        """
+        List outbound message keys for the given batch.
+        """
+        return self.riak_backend.list_batch_outbound_keys(
+            batch_id, max_results=max_results, continuation=continuation)
+
+    def list_message_event_keys(self, message_id, max_results=None,
+                                continuation=None):
+        """
+        List event keys for the given outbound message.
+        """
+        return self.riak_backend.list_message_event_keys(
+            message_id, max_results=max_results, continuation=continuation)

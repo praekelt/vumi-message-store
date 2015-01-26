@@ -7,9 +7,10 @@ from vumi.tests.helpers import VumiTestCase, MessageHelper, PersistenceHelper
 from zope.interface.verify import verifyObject
 
 from vumi_message_store.interfaces import (
-    IMessageStoreBatchManager, IOperationalMessageStore)
+    IMessageStoreBatchManager, IOperationalMessageStore, IQueryMessageStore)
 from vumi_message_store.message_store import (
-    RiakOnlyMessageStoreBatchManager, RiakOnlyOperationalMessageStore)
+    RiakOnlyMessageStoreBatchManager, RiakOnlyOperationalMessageStore,
+    RiakOnlyQueryMessageStore)
 
 
 # TODO: Better way to test indexes.
@@ -505,3 +506,155 @@ class TestRiakOnlyOperationalMessageStore(VumiTestCase):
         """
         stored_record = yield self.store.get_event("badevent")
         self.assertEqual(stored_record, None)
+
+
+class TestRiakOnlyQueryMessageStore(VumiTestCase):
+
+    def setUp(self):
+        self.persistence_helper = self.add_helper(
+            PersistenceHelper(use_riak=True))
+        self.manager = self.persistence_helper.get_riak_manager()
+        self.store = RiakOnlyQueryMessageStore(self.manager)
+        self.backend = self.store.riak_backend
+        self.msg_helper = self.add_helper(MessageHelper())
+
+    def test_implements_IQueryMessageStore(self):
+        """
+        RiakOnlyQueryMessageStore implements the IQueryMessageStore interface.
+        """
+        self.assertTrue(IQueryMessageStore.providedBy(self.store))
+        self.assertTrue(verifyObject(IQueryMessageStore, self.store))
+
+    @inlineCallbacks
+    def test_get_inbound_message(self):
+        """
+        When we ask for an inbound message, we get the TransportUserMessage
+        object.
+        """
+        msg = self.msg_helper.make_inbound("apples")
+        yield self.backend.add_inbound_message(msg)
+        stored_msg = yield self.store.get_inbound_message(msg["message_id"])
+        self.assertEqual(stored_msg, msg)
+
+    @inlineCallbacks
+    def test_get_inbound_message_missing(self):
+        """
+        When we ask for an inbound message that does not exist, we get
+        ``None``.
+        """
+        stored_record = yield self.store.get_inbound_message("badmsg")
+        self.assertEqual(stored_record, None)
+
+    @inlineCallbacks
+    def test_get_outbound_message(self):
+        """
+        When we ask for an outbound message, we get the TransportUserMessage
+        object.
+        """
+        msg = self.msg_helper.make_outbound("apples")
+        yield self.backend.add_outbound_message(msg)
+        stored_msg = yield self.store.get_outbound_message(msg["message_id"])
+        self.assertEqual(stored_msg, msg)
+
+    @inlineCallbacks
+    def test_get_outbound_message_missing(self):
+        """
+        When we ask for an outbound message that does not exist, we get
+        ``None``.
+        """
+        stored_record = yield self.store.get_outbound_message("badmsg")
+        self.assertEqual(stored_record, None)
+
+    @inlineCallbacks
+    def test_get_event(self):
+        """
+        When we ask for an event, we get the TransportEvent object.
+        """
+        msg = self.msg_helper.make_outbound("apples")
+        ack = self.msg_helper.make_ack(msg)
+        yield self.backend.add_event(ack)
+        stored_event = yield self.store.get_event(ack["event_id"])
+        self.assertEqual(stored_event, ack)
+
+    @inlineCallbacks
+    def test_get_event_missing(self):
+        """
+        When we ask for an event that does not exist, we get ``None``.
+        """
+        stored_record = yield self.store.get_event("badevent")
+        self.assertEqual(stored_record, None)
+
+    @inlineCallbacks
+    def test_list_batch_inbound_keys(self):
+        """
+        When we ask for a list of inbound message keys, we get an IndexPage
+        containing the first page of results and can ask for following pages
+        until all results are delivered.
+        """
+        batch_id = yield self.backend.batch_start()
+        messages = []
+        for i in xrange(5):
+            msg = self.msg_helper.make_inbound("Message %s" % (i,))
+            yield self.backend.add_inbound_message(msg, batch_ids=[batch_id])
+            messages.append(msg)
+
+        all_keys = sorted(msg["message_id"] for msg in messages)
+
+        keys_p1 = yield self.store.list_batch_inbound_keys(batch_id, 3)
+        # Paginated results are sorted by key.
+        self.assertEqual(sorted(keys_p1), all_keys[:3])
+
+        keys_p2 = yield keys_p1.next_page()
+        self.assertEqual(sorted(keys_p2), all_keys[3:])
+
+    @inlineCallbacks
+    def test_list_batch_outbound_keys(self):
+        """
+        When we ask for a list of outbound message keys, we get an IndexPage
+        containing the first page of results and can ask for following pages
+        until all results are delivered.
+        """
+        batch_id = yield self.backend.batch_start()
+        messages = []
+        for i in xrange(5):
+            msg = self.msg_helper.make_outbound("Message %s" % (i,))
+            yield self.backend.add_outbound_message(msg, batch_ids=[batch_id])
+            messages.append(msg)
+
+        all_keys = sorted(msg["message_id"] for msg in messages)
+
+        keys_p1 = yield self.store.list_batch_outbound_keys(batch_id, 3)
+        # Paginated results are sorted by key.
+        self.assertEqual(sorted(keys_p1), all_keys[:3])
+
+        keys_p2 = yield keys_p1.next_page()
+        self.assertEqual(sorted(keys_p2), all_keys[3:])
+
+    @inlineCallbacks
+    def test_list_message_event_keys(self):
+        """
+        When we ask for a list of outbound message keys, we get an IndexPage
+        containing the first page of results and can ask for following pages
+        until all results are delivered.
+        """
+        batch_id = yield self.backend.batch_start()
+        msg = self.msg_helper.make_outbound("pears")
+        yield self.backend.add_outbound_message(msg, batch_ids=[batch_id])
+        events = [
+            self.msg_helper.make_ack(msg),
+            self.msg_helper.make_delivery_report(msg),
+            self.msg_helper.make_delivery_report(msg),
+            self.msg_helper.make_delivery_report(msg),
+            self.msg_helper.make_delivery_report(msg),
+        ]
+        for event in events:
+            yield self.backend.add_event(event)
+        all_keys = sorted(event["event_id"] for event in events)
+
+        keys_p1 = yield self.store.list_message_event_keys(
+            msg["message_id"], 3)
+        # Paginated results are sorted by key.
+        self.assertEqual(sorted(keys_p1), all_keys[:3])
+
+        keys_p2 = yield keys_p1.next_page()
+        self.assertEqual(sorted(keys_p2), all_keys[3:])

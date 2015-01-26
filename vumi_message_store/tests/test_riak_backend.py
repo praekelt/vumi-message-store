@@ -577,3 +577,112 @@ class TestMessageStoreRiakBackend(VumiTestCase):
         """
         stored_record = yield self.backend.get_event("badevent")
         self.assertEqual(stored_record, None)
+
+    @inlineCallbacks
+    def test_list_batch_inbound_keys(self):
+        """
+        When we ask for a list of inbound message keys, we get an IndexPage
+        containing the first page of results and can ask for following pages
+        until all results are delivered.
+        """
+        batch_id = yield self.backend.batch_start()
+        messages = []
+        for i in xrange(5):
+            msg = self.msg_helper.make_inbound("Message %s" % (i,))
+            yield self.backend.add_inbound_message(msg, batch_ids=[batch_id])
+            messages.append(msg)
+
+        all_keys = sorted(msg["message_id"] for msg in messages)
+
+        keys_p1 = yield self.backend.list_batch_inbound_keys(batch_id, 3)
+        # Paginated results are sorted by key.
+        self.assertEqual(sorted(keys_p1), all_keys[:3])
+
+        keys_p2 = yield keys_p1.next_page()
+        self.assertEqual(sorted(keys_p2), all_keys[3:])
+
+    @inlineCallbacks
+    def test_list_batch_inbound_keys_empty(self):
+        """
+        When we ask for a list of inbound message keys for an empty batch, we
+        get an empty IndexPage.
+        """
+        batch_id = yield self.backend.batch_start()
+        keys_page = yield self.backend.list_batch_inbound_keys(batch_id)
+        self.assertEqual(list(keys_page), [])
+
+    @inlineCallbacks
+    def test_list_batch_outbound_keys(self):
+        """
+        When we ask for a list of outbound message keys, we get an IndexPage
+        containing the first page of results and can ask for following pages
+        until all results are delivered.
+        """
+        batch_id = yield self.backend.batch_start()
+        messages = []
+        for i in xrange(5):
+            msg = self.msg_helper.make_outbound("Message %s" % (i,))
+            yield self.backend.add_outbound_message(msg, batch_ids=[batch_id])
+            messages.append(msg)
+
+        all_keys = sorted(msg["message_id"] for msg in messages)
+
+        keys_p1 = yield self.backend.list_batch_outbound_keys(batch_id, 3)
+        # Paginated results are sorted by key.
+        self.assertEqual(sorted(keys_p1), all_keys[:3])
+
+        keys_p2 = yield keys_p1.next_page()
+        self.assertEqual(sorted(keys_p2), all_keys[3:])
+
+    @inlineCallbacks
+    def test_list_batch_outbound_keys_empty(self):
+        """
+        When we ask for a list of outbound message keys for an empty batch, we
+        get an empty IndexPage.
+        """
+        batch_id = yield self.backend.batch_start()
+        keys_page = yield self.backend.list_batch_outbound_keys(batch_id)
+        self.assertEqual(list(keys_page), [])
+
+    @inlineCallbacks
+    def test_list_message_event_keys(self):
+        """
+        When we ask for a list of outbound message keys, we get an IndexPage
+        containing the first page of results and can ask for following pages
+        until all results are delivered.
+        """
+        batch_id = yield self.backend.batch_start()
+        msg = self.msg_helper.make_outbound("pears")
+        yield self.backend.add_outbound_message(msg, batch_ids=[batch_id])
+        events = [
+            self.msg_helper.make_ack(msg),
+            self.msg_helper.make_delivery_report(msg),
+            self.msg_helper.make_delivery_report(msg),
+            self.msg_helper.make_delivery_report(msg),
+            self.msg_helper.make_delivery_report(msg),
+        ]
+        for event in events:
+            yield self.backend.add_event(event)
+        all_keys = sorted(event["event_id"] for event in events)
+
+        keys_p1 = yield self.backend.list_message_event_keys(
+            msg["message_id"], 3)
+        # Paginated results are sorted by key.
+        self.assertEqual(sorted(keys_p1), all_keys[:3])
+
+        keys_p2 = yield keys_p1.next_page()
+        self.assertEqual(sorted(keys_p2), all_keys[3:])
+
+    @inlineCallbacks
+    def test_list_message_event_keys_empty(self):
+        """
+        When we ask for a list of event keys for a message with no events, we
+        get an empty IndexPage.
+        """
+        batch_id = yield self.backend.batch_start()
+        msg = self.msg_helper.make_outbound("pears")
+        yield self.backend.add_outbound_message(msg, batch_ids=[batch_id])
+
+        keys_page = yield self.backend.list_message_event_keys(
+            msg["message_id"])
+        self.assertEqual(list(keys_page), [])

@@ -21,6 +21,9 @@ class MessageStoreRiakBackend(object):
     message store objects should route all Riak things through here.
     """
 
+    # The Python Riak client defaults to max_results=1000 in places.
+    DEFAULT_MAX_RESULTS = 1000
+
     def __init__(self, manager):
         self.manager = manager
         self.batches = manager.proxy(Batch)
@@ -168,3 +171,36 @@ class MessageStoreRiakBackend(object):
         """
         event = yield self.get_raw_event(event_id)
         returnValue(event.event if event is not None else None)
+
+    def list_batch_inbound_keys(self, batch_id, max_results=None,
+                                continuation=None):
+        """
+        List inbound message keys for the given batch.
+        """
+        if max_results is None:
+            max_results = self.DEFAULT_MAX_RESULTS
+        return self.inbound_messages.index_keys_page(
+            'batches', batch_id, max_results=max_results,
+            continuation=continuation)
+
+    def list_batch_outbound_keys(self, batch_id, max_results=None,
+                                 continuation=None):
+        """
+        List outbound message keys for the given batch.
+        """
+        if max_results is None:
+            max_results = self.DEFAULT_MAX_RESULTS
+        return self.outbound_messages.index_keys_page(
+            'batches', batch_id, max_results=max_results,
+            continuation=continuation)
+
+    def list_message_event_keys(self, message_id, max_results=None,
+                                continuation=None):
+        """
+        List event keys for the given outbound message.
+        """
+        if max_results is None:
+            max_results = self.DEFAULT_MAX_RESULTS
+        return self.events.index_keys_page(
+            'message', message_id, max_results=max_results,
+            continuation=continuation)

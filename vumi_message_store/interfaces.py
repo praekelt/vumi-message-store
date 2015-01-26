@@ -26,21 +26,38 @@ class IMessageStoreBatchManager(Interface):
 
         :returns:
             The batch identifier for the new batch.
+            If async, a Deferred is returned instead.
         """
 
     def batch_done(batch_id):
         """
         Clear all references to a batch from its tags.
+
+        :param batch_id:
+            The batch identifier for the batch to operate on.
+
+        :returns:
+            ``None``.
+            If async, a Deferred is returned instead.
         """
 
     def get_batch(batch_id):
         """
         Get a batch from the message store.
+
+        :param batch_id:
+            The batch identifier for the batch to operate on.
+
+        :returns:
+            A Batch model object.
+            If async, a Deferred is returned instead.
         """
 
     def get_tag_info(tag):
         """
         Get tag information from the message store.
+
+        TODO: document params.
         """
 
 
@@ -126,5 +143,87 @@ class IOperationalMessageStore(Interface):
 
         :returns:
             A TransportEvent, or ``None`` if the event is not found.
+            If async, a Deferred is returned instead.
+        """
+
+
+class IQueryMessageStore(Interface):
+    """
+    Interface for a query message store.
+
+    This is for querying stored messages. All operations are read-only.
+    """
+
+    def get_inbound_message(msg_id):
+        """
+        Get an inbound mesage from the message store.
+
+        :param msg_id:
+            The identifier of the message to retrieve.
+
+        :returns:
+            A TransportUserMessage, or ``None`` if the message is not found.
+            If async, a Deferred is returned instead.
+        """
+
+    def get_outbound_message(msg_id):
+        """
+        Get an outbound mesage from the message store.
+
+        :param msg_id:
+            The identifier of the message to retrieve.
+
+        :returns:
+            A TransportUserMessage, or ``None`` if the message is not found.
+            If async, a Deferred is returned instead.
+        """
+
+    def get_event(event_id):
+        """
+        Get an event from the message store.
+
+        :param event_id:
+            The identifier of the event to retrieve.
+
+        :returns:
+            A TransportEvent, or ``None`` if the event is not found.
+            If async, a Deferred is returned instead.
+        """
+
+    def list_batch_inbound_keys(batch_id, max_results=None, continuation=None):
+        """
+        List inbound message keys for the given batch.
+
+        :param batch_id:
+            The batch identifier for the batch to operate on.
+
+        :returns:
+            An IndexPage object containing a list of inbound message keys.
+            If async, a Deferred is returned instead.
+        """
+
+    def list_batch_outbound_keys(batch_id, max_results=None,
+                                 continuation=None):
+        """
+        List outbound message keys for the given batch.
+
+        :param batch_id:
+            The batch identifier for the batch to operate on.
+
+        :returns:
+            An IndexPage object containing a list of outbound message keys.
+            If async, a Deferred is returned instead.
+        """
+
+    def list_message_event_keys(message_id, max_results=None,
+                                continuation=None):
+        """
+        List event keys for the given outbound message.
+
+        :param message_id:
+            The message identifier to find events for.
+
+        :returns:
+            An IndexPage object containing a list of event keys.
             If async, a Deferred is returned instead.
         """
