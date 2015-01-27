@@ -1,0 +1,914 @@
+# -*- coding: utf-8 -*-
+
+"""Tests for vumi_message_store.batch_info_cache."""
+
+from datetime import datetime
+
+from twisted.internet.defer import inlineCallbacks
+from vumi.tests.helpers import VumiTestCase, MessageHelper, PersistenceHelper
+
+from vumi_message_store.batch_info_cache import to_timestamp, BatchInfoCache
+
+
+class TestBatchInfoCacheUtils(VumiTestCase):
+
+    def test_to_timestamp_datetime(self):
+        """
+        We can convert a datetime object to a unix timestamp.
+        """
+        timestamp = to_timestamp(datetime(2015, 1, 26, 19, 22, 05))
+        self.assertEqual(timestamp, 1422292925.0)
+
+    def test_to_timestamp_vumi_format_string(self):
+        """
+        We can convert a VUMI_DATE_FORMAT string to a unix timestamp.
+        """
+        timestamp = to_timestamp("2015-01-26 19:22:05.000")
+        self.assertEqual(timestamp, 1422292925.0)
+
+
+class TestBatchInfoCache(VumiTestCase):
+
+    @inlineCallbacks
+    def setUp(self):
+        self.persistence_helper = self.add_helper(PersistenceHelper())
+        self.redis = yield self.persistence_helper.get_redis_manager()
+        self.batch_info_cache = BatchInfoCache(self.redis)
+        self.msg_helper = self.add_helper(MessageHelper())
+
+    @inlineCallbacks
+    def assert_redis_keys(self, expected_keys):
+        keys = yield self.redis.keys()
+        self.assertEqual(set(expected_keys), set(keys))
+
+    @inlineCallbacks
+    def assert_redis_string(self, key, expected_value):
+        value = yield self.redis.get(key)
+        self.assertEqual(expected_value, value)
+
+    @inlineCallbacks
+    def assert_redis_set(self, key, expected_value):
+        value = yield self.redis.smembers(key)
+        self.assertEqual(set(expected_value), set(value))
+
+    @inlineCallbacks
+    def assert_redis_hash(self, key, expected_value):
+        value = yield self.redis.hgetall(key)
+        self.assertEqual(expected_value, value)
+
+    @inlineCallbacks
+    def assert_redis_zset(self, key, expected_value):
+        value = yield self.redis.zrange(
+            key, start=0, stop=-1, desc=False, withscores=True)
+        self.assertEqual(expected_value, value)
+
+    @inlineCallbacks
+    def test_batch_start(self):
+        """
+        Starting a batch creates and initialises counters and adds the batch
+        identifier to the set of batches we're tracking.
+        """
+        yield self.assert_redis_keys([])
+        yield self.batch_info_cache.batch_start("mybatch")
+        yield self.assert_redis_keys([
+            "batches",
+            "batches:inbound_count:mybatch",
+            "batches:outbound_count:mybatch",
+            "batches:event_count:mybatch",
+            "batches:status:mybatch",
+        ])
+        yield self.assert_redis_set("batches", ["mybatch"])
+        yield self.assert_redis_string("batches:inbound_count:mybatch", "0")
+        yield self.assert_redis_string("batches:outbound_count:mybatch", "0")
+        yield self.assert_redis_string("batches:event_count:mybatch", "0")
+        yield self.assert_redis_hash("batches:status:mybatch", {
+            "sent": "0",
+            "ack": "0",
+            "nack": "0",
+            "delivery_report": "0",
+            "delivery_report.delivered": "0",
+            "delivery_report.failed": "0",
+            "delivery_report.pending": "0",
+        })
+
+    @inlineCallbacks
+    def test_batch_exists(self):
+        """
+        The existence of a batch can be queried.
+        """
+        no_batches = yield self.batch_info_cache.batch_exists("mybatch")
+        self.assertEqual(no_batches, False)
+        yield self.batch_info_cache.batch_start("mybatch")
+        mybatch = yield self.batch_info_cache.batch_exists("mybatch")
+        self.assertEqual(mybatch, True)
+        yourbatch = yield self.batch_info_cache.batch_exists("yourbatch")
+        self.assertEqual(yourbatch, False)
+
+    @inlineCallbacks
+    def test_clear_batch(self):
+        """
+        Clearing a batch deletes all Redis keys for that batch and removes the
+        batch identifier from the set of batches we're tracking.
+        """
+        yield self.batch_info_cache.batch_start("mybatch")
+        timestamp = to_timestamp(datetime.utcnow())
+        yield self.batch_info_cache.add_inbound_message_key(
+            "mybatch", "in", timestamp)
+        yield self.batch_info_cache.add_outbound_message_key(
+            "mybatch", "out", timestamp)
+        yield self.batch_info_cache.add_event_key(
+            "mybatch", "ack", "ack", timestamp)
+        yield self.assert_redis_keys([
+            "batches",
+            "batches:inbound:mybatch",
+            "batches:outbound:mybatch",
+            "batches:event:mybatch",
+            "batches:inbound_count:mybatch",
+            "batches:outbound_count:mybatch",
+            "batches:event_count:mybatch",
+            "batches:status:mybatch",
+        ])
+        yield self.assert_redis_set("batches", ["mybatch"])
+
+        yield self.batch_info_cache.clear_batch("mybatch")
+        yield self.assert_redis_keys(["batches"])
+        yield self.assert_redis_set("batches", [])
+
+    @inlineCallbacks
+    def test_add_inbound_message(self):
+        """
+        Adding an inbound message updates the relevant counters and adds the
+        message_id to the inbound messages zset.
+        """
+        yield self.batch_info_cache.batch_start("mybatch")
+        msg = self.msg_helper.make_inbound("apples")
+        yield self.batch_info_cache.add_inbound_message("mybatch", msg)
+
+        yield self.assert_redis_keys([
+            "batches",
+            "batches:inbound:mybatch",
+            "batches:inbound_count:mybatch",
+            "batches:outbound_count:mybatch",
+            "batches:event_count:mybatch",
+            "batches:status:mybatch",
+        ])
+
+        timestamp = to_timestamp(msg["timestamp"])
+        yield self.assert_redis_zset(
+            "batches:inbound:mybatch", [(msg["message_id"], timestamp)])
+        yield self.assert_redis_string("batches:inbound_count:mybatch", "1")
+        yield self.assert_redis_string("batches:outbound_count:mybatch", "0")
+        yield self.assert_redis_string("batches:event_count:mybatch", "0")
+        yield self.assert_redis_hash("batches:status:mybatch", {
+            "sent": "0",
+            "ack": "0",
+            "nack": "0",
+            "delivery_report": "0",
+            "delivery_report.delivered": "0",
+            "delivery_report.failed": "0",
+            "delivery_report.pending": "0",
+        })
+
+    @inlineCallbacks
+    def test_add_inbound_message_key(self):
+        """
+        An inbound message can be added with just a key and timestamp.
+        """
+        yield self.batch_info_cache.batch_start("mybatch")
+        message_id = "mymessage"
+        timestamp = to_timestamp(datetime.utcnow())
+        yield self.batch_info_cache.add_inbound_message_key(
+            "mybatch", message_id, timestamp)
+
+        yield self.assert_redis_keys([
+            "batches",
+            "batches:inbound:mybatch",
+            "batches:inbound_count:mybatch",
+            "batches:outbound_count:mybatch",
+            "batches:event_count:mybatch",
+            "batches:status:mybatch",
+        ])
+
+        yield self.assert_redis_zset(
+            "batches:inbound:mybatch", [(message_id, timestamp)])
+        yield self.assert_redis_string("batches:inbound_count:mybatch", "1")
+        yield self.assert_redis_string("batches:outbound_count:mybatch", "0")
+        yield self.assert_redis_string("batches:event_count:mybatch", "0")
+        yield self.assert_redis_hash("batches:status:mybatch", {
+            "sent": "0",
+            "ack": "0",
+            "nack": "0",
+            "delivery_report": "0",
+            "delivery_report.delivered": "0",
+            "delivery_report.failed": "0",
+            "delivery_report.pending": "0",
+        })
+
+    @inlineCallbacks
+    def test_add_inbound_message_key_again(self):
+        """
+        Adding an inbound message multiple times only updates the batch info
+        once.
+        """
+        yield self.batch_info_cache.batch_start("mybatch")
+        message_id = "mymessage"
+        timestamp = to_timestamp(datetime.utcnow())
+        yield self.batch_info_cache.add_inbound_message_key(
+            "mybatch", message_id, timestamp)
+        yield self.batch_info_cache.add_inbound_message_key(
+            "mybatch", message_id, timestamp)
+        yield self.batch_info_cache.add_inbound_message_key(
+            "mybatch", message_id, timestamp)
+
+        yield self.assert_redis_zset(
+            "batches:inbound:mybatch", [(message_id, timestamp)])
+        yield self.assert_redis_string("batches:inbound_count:mybatch", "1")
+        yield self.assert_redis_string("batches:outbound_count:mybatch", "0")
+        yield self.assert_redis_string("batches:event_count:mybatch", "0")
+        yield self.assert_redis_hash("batches:status:mybatch", {
+            "sent": "0",
+            "ack": "0",
+            "nack": "0",
+            "delivery_report": "0",
+            "delivery_report.delivered": "0",
+            "delivery_report.failed": "0",
+            "delivery_report.pending": "0",
+        })
+
+    @inlineCallbacks
+    def test_add_inbound_message_key_truncates_zset(self):
+        """
+        When our inbound message zset is full, adding a new message key
+        truncates it by removing the oldest entries.
+        """
+        self.batch_info_cache.TRUNCATE_MESSAGE_KEY_ZSET_AT = 3
+        start = to_timestamp(datetime.utcnow()) - 10
+        msgs = [("message%d" % i, start + i) for i in range(5)]
+        yield self.batch_info_cache.batch_start("batch")
+
+        yield self.batch_info_cache.add_inbound_message_key("batch", *msgs[0])
+        yield self.assert_redis_zset("batches:inbound:batch", msgs[:1])
+        yield self.batch_info_cache.add_inbound_message_key("batch", *msgs[1])
+        yield self.assert_redis_zset("batches:inbound:batch", msgs[:2])
+        yield self.batch_info_cache.add_inbound_message_key("batch", *msgs[2])
+        yield self.assert_redis_zset("batches:inbound:batch", msgs[:3])
+        yield self.batch_info_cache.add_inbound_message_key("batch", *msgs[3])
+        yield self.assert_redis_zset("batches:inbound:batch", msgs[1:4])
+        yield self.batch_info_cache.add_inbound_message_key("batch", *msgs[4])
+        yield self.assert_redis_zset("batches:inbound:batch", msgs[2:5])
+        yield self.assert_redis_string("batches:inbound_count:batch", "5")
+
+    @inlineCallbacks
+    def test_add_outbound_message(self):
+        """
+        Adding an outbound message updates the relevant counters and adds the
+        message_id to the outbound messages zset.
+        """
+        yield self.batch_info_cache.batch_start("mybatch")
+        msg = self.msg_helper.make_outbound("apples")
+        yield self.batch_info_cache.add_outbound_message("mybatch", msg)
+
+        yield self.assert_redis_keys([
+            "batches",
+            "batches:outbound:mybatch",
+            "batches:inbound_count:mybatch",
+            "batches:outbound_count:mybatch",
+            "batches:event_count:mybatch",
+            "batches:status:mybatch",
+        ])
+
+        timestamp = to_timestamp(msg["timestamp"])
+        yield self.assert_redis_zset(
+            "batches:outbound:mybatch", [(msg["message_id"], timestamp)])
+        yield self.assert_redis_string("batches:inbound_count:mybatch", "0")
+        yield self.assert_redis_string("batches:outbound_count:mybatch", "1")
+        yield self.assert_redis_string("batches:event_count:mybatch", "0")
+        yield self.assert_redis_hash("batches:status:mybatch", {
+            "sent": "1",
+            "ack": "0",
+            "nack": "0",
+            "delivery_report": "0",
+            "delivery_report.delivered": "0",
+            "delivery_report.failed": "0",
+            "delivery_report.pending": "0",
+        })
+
+    @inlineCallbacks
+    def test_add_outbound_message_key(self):
+        """
+        An outbound message can be added with just a key and timestamp.
+        """
+        yield self.batch_info_cache.batch_start("mybatch")
+        message_id = "mymessage"
+        timestamp = to_timestamp(datetime.utcnow())
+        yield self.batch_info_cache.add_outbound_message_key(
+            "mybatch", message_id, timestamp)
+
+        yield self.assert_redis_keys([
+            "batches",
+            "batches:outbound:mybatch",
+            "batches:inbound_count:mybatch",
+            "batches:outbound_count:mybatch",
+            "batches:event_count:mybatch",
+            "batches:status:mybatch",
+        ])
+
+        yield self.assert_redis_zset(
+            "batches:outbound:mybatch", [(message_id, timestamp)])
+        yield self.assert_redis_string("batches:inbound_count:mybatch", "0")
+        yield self.assert_redis_string("batches:outbound_count:mybatch", "1")
+        yield self.assert_redis_string("batches:event_count:mybatch", "0")
+        yield self.assert_redis_hash("batches:status:mybatch", {
+            "sent": "1",
+            "ack": "0",
+            "nack": "0",
+            "delivery_report": "0",
+            "delivery_report.delivered": "0",
+            "delivery_report.failed": "0",
+            "delivery_report.pending": "0",
+        })
+
+    @inlineCallbacks
+    def test_add_outbound_message_key_again(self):
+        """
+        Adding an outbound message multiple times only updates the batch info
+        once.
+        """
+        yield self.batch_info_cache.batch_start("mybatch")
+        message_id = "mymessage"
+        timestamp = to_timestamp(datetime.utcnow())
+        yield self.batch_info_cache.add_outbound_message_key(
+            "mybatch", message_id, timestamp)
+        yield self.batch_info_cache.add_outbound_message_key(
+            "mybatch", message_id, timestamp)
+        yield self.batch_info_cache.add_outbound_message_key(
+            "mybatch", message_id, timestamp)
+
+        yield self.assert_redis_zset(
+            "batches:outbound:mybatch", [(message_id, timestamp)])
+        yield self.assert_redis_string("batches:inbound_count:mybatch", "0")
+        yield self.assert_redis_string("batches:outbound_count:mybatch", "1")
+        yield self.assert_redis_string("batches:event_count:mybatch", "0")
+        yield self.assert_redis_hash("batches:status:mybatch", {
+            "sent": "1",
+            "ack": "0",
+            "nack": "0",
+            "delivery_report": "0",
+            "delivery_report.delivered": "0",
+            "delivery_report.failed": "0",
+            "delivery_report.pending": "0",
+        })
+
+    @inlineCallbacks
+    def test_add_outbound_message_key_truncates_zset(self):
+        """
+        When our outbound message zset is full, adding a new message key
+        truncates it by removing the oldest entries.
+        """
+        self.batch_info_cache.TRUNCATE_MESSAGE_KEY_ZSET_AT = 3
+        start = to_timestamp(datetime.utcnow()) - 10
+        msgs = [("message%d" % i, start + i) for i in range(5)]
+        yield self.batch_info_cache.batch_start("batch")
+
+        yield self.batch_info_cache.add_outbound_message_key("batch", *msgs[0])
+        yield self.assert_redis_zset("batches:outbound:batch", msgs[:1])
+        yield self.batch_info_cache.add_outbound_message_key("batch", *msgs[1])
+        yield self.assert_redis_zset("batches:outbound:batch", msgs[:2])
+        yield self.batch_info_cache.add_outbound_message_key("batch", *msgs[2])
+        yield self.assert_redis_zset("batches:outbound:batch", msgs[:3])
+        yield self.batch_info_cache.add_outbound_message_key("batch", *msgs[3])
+        yield self.assert_redis_zset("batches:outbound:batch", msgs[1:4])
+        yield self.batch_info_cache.add_outbound_message_key("batch", *msgs[4])
+        yield self.assert_redis_zset("batches:outbound:batch", msgs[2:5])
+        yield self.assert_redis_string("batches:outbound_count:batch", "5")
+
+    @inlineCallbacks
+    def test_add_event_ack(self):
+        """
+        Adding an ack updates the relevant counters and adds the event_id to
+        the events zset.
+        """
+        yield self.batch_info_cache.batch_start("mybatch")
+        msg = self.msg_helper.make_outbound("apples")
+        ack = self.msg_helper.make_ack(msg)
+        yield self.batch_info_cache.add_event("mybatch", ack)
+
+        yield self.assert_redis_keys([
+            "batches",
+            "batches:event:mybatch",
+            "batches:inbound_count:mybatch",
+            "batches:outbound_count:mybatch",
+            "batches:event_count:mybatch",
+            "batches:status:mybatch",
+        ])
+
+        timestamp = to_timestamp(ack["timestamp"])
+        yield self.assert_redis_zset(
+            "batches:event:mybatch", [(ack["event_id"], timestamp)])
+        yield self.assert_redis_string("batches:inbound_count:mybatch", "0")
+        yield self.assert_redis_string("batches:outbound_count:mybatch", "0")
+        yield self.assert_redis_string("batches:event_count:mybatch", "1")
+        yield self.assert_redis_hash("batches:status:mybatch", {
+            "sent": "0",
+            "ack": "1",
+            "nack": "0",
+            "delivery_report": "0",
+            "delivery_report.delivered": "0",
+            "delivery_report.failed": "0",
+            "delivery_report.pending": "0",
+        })
+
+    @inlineCallbacks
+    def test_add_event_nack(self):
+        """
+        Adding a nack updates the relevant counters and adds the event_id to
+        the events zset.
+        """
+        yield self.batch_info_cache.batch_start("mybatch")
+        msg = self.msg_helper.make_outbound("apples")
+        nack = self.msg_helper.make_nack(msg)
+        yield self.batch_info_cache.add_event("mybatch", nack)
+
+        yield self.assert_redis_keys([
+            "batches",
+            "batches:event:mybatch",
+            "batches:inbound_count:mybatch",
+            "batches:outbound_count:mybatch",
+            "batches:event_count:mybatch",
+            "batches:status:mybatch",
+        ])
+
+        timestamp = to_timestamp(nack["timestamp"])
+        yield self.assert_redis_zset(
+            "batches:event:mybatch", [(nack["event_id"], timestamp)])
+        yield self.assert_redis_string("batches:inbound_count:mybatch", "0")
+        yield self.assert_redis_string("batches:outbound_count:mybatch", "0")
+        yield self.assert_redis_string("batches:event_count:mybatch", "1")
+        yield self.assert_redis_hash("batches:status:mybatch", {
+            "sent": "0",
+            "ack": "0",
+            "nack": "1",
+            "delivery_report": "0",
+            "delivery_report.delivered": "0",
+            "delivery_report.failed": "0",
+            "delivery_report.pending": "0",
+        })
+
+    @inlineCallbacks
+    def test_add_event_delivery_report(self):
+        """
+        Adding a delivery updates the relevant counters and adds the event_id
+        to the events zset.
+        """
+        yield self.batch_info_cache.batch_start("mybatch")
+        msg = self.msg_helper.make_outbound("apples")
+        dr = self.msg_helper.make_delivery_report(msg)
+        yield self.batch_info_cache.add_event("mybatch", dr)
+
+        yield self.assert_redis_keys([
+            "batches",
+            "batches:event:mybatch",
+            "batches:inbound_count:mybatch",
+            "batches:outbound_count:mybatch",
+            "batches:event_count:mybatch",
+            "batches:status:mybatch",
+        ])
+
+        timestamp = to_timestamp(dr["timestamp"])
+        yield self.assert_redis_zset(
+            "batches:event:mybatch", [(dr["event_id"], timestamp)])
+        yield self.assert_redis_string("batches:inbound_count:mybatch", "0")
+        yield self.assert_redis_string("batches:outbound_count:mybatch", "0")
+        yield self.assert_redis_string("batches:event_count:mybatch", "1")
+        yield self.assert_redis_hash("batches:status:mybatch", {
+            "sent": "0",
+            "ack": "0",
+            "nack": "0",
+            "delivery_report": "1",
+            "delivery_report.delivered": "1",
+            "delivery_report.failed": "0",
+            "delivery_report.pending": "0",
+        })
+
+    @inlineCallbacks
+    def test_add_event_key_ack(self):
+        """
+        An ack can be added with just a key, event type, and timestamp.
+        """
+        yield self.batch_info_cache.batch_start("mybatch")
+        event_id = "myevent"
+        timestamp = to_timestamp(datetime.utcnow())
+        yield self.batch_info_cache.add_event_key(
+            "mybatch", event_id, "ack", timestamp)
+
+        yield self.assert_redis_keys([
+            "batches",
+            "batches:event:mybatch",
+            "batches:inbound_count:mybatch",
+            "batches:outbound_count:mybatch",
+            "batches:event_count:mybatch",
+            "batches:status:mybatch",
+        ])
+
+        yield self.assert_redis_zset(
+            "batches:event:mybatch", [(event_id, timestamp)])
+        yield self.assert_redis_string("batches:inbound_count:mybatch", "0")
+        yield self.assert_redis_string("batches:outbound_count:mybatch", "0")
+        yield self.assert_redis_string("batches:event_count:mybatch", "1")
+        yield self.assert_redis_hash("batches:status:mybatch", {
+            "sent": "0",
+            "ack": "1",
+            "nack": "0",
+            "delivery_report": "0",
+            "delivery_report.delivered": "0",
+            "delivery_report.failed": "0",
+            "delivery_report.pending": "0",
+        })
+
+    @inlineCallbacks
+    def test_add_event_key_delivery_report(self):
+        """
+        A delivery report can be added with just a key, event type, and
+        timestamp.
+        """
+        yield self.batch_info_cache.batch_start("mybatch")
+        event_id = "myevent"
+        timestamp = to_timestamp(datetime.utcnow())
+        yield self.batch_info_cache.add_event_key(
+            "mybatch", event_id, "delivery_report.delivered", timestamp)
+
+        yield self.assert_redis_keys([
+            "batches",
+            "batches:event:mybatch",
+            "batches:inbound_count:mybatch",
+            "batches:outbound_count:mybatch",
+            "batches:event_count:mybatch",
+            "batches:status:mybatch",
+        ])
+
+        yield self.assert_redis_zset(
+            "batches:event:mybatch", [(event_id, timestamp)])
+        yield self.assert_redis_string("batches:inbound_count:mybatch", "0")
+        yield self.assert_redis_string("batches:outbound_count:mybatch", "0")
+        yield self.assert_redis_string("batches:event_count:mybatch", "1")
+        yield self.assert_redis_hash("batches:status:mybatch", {
+            "sent": "0",
+            "ack": "0",
+            "nack": "0",
+            "delivery_report": "1",
+            "delivery_report.delivered": "1",
+            "delivery_report.failed": "0",
+            "delivery_report.pending": "0",
+        })
+
+    @inlineCallbacks
+    def test_add_event_key_again(self):
+        """
+        Adding an event multiple times only updates the batch info once.
+        """
+        yield self.batch_info_cache.batch_start("mybatch")
+        event_id = "myevent"
+        timestamp = to_timestamp(datetime.utcnow())
+        yield self.batch_info_cache.add_event_key(
+            "mybatch", event_id, "ack", timestamp)
+        yield self.batch_info_cache.add_event_key(
+            "mybatch", event_id, "ack", timestamp)
+        yield self.batch_info_cache.add_event_key(
+            "mybatch", event_id, "ack", timestamp)
+
+        yield self.assert_redis_zset(
+            "batches:event:mybatch", [(event_id, timestamp)])
+        yield self.assert_redis_string("batches:inbound_count:mybatch", "0")
+        yield self.assert_redis_string("batches:outbound_count:mybatch", "0")
+        yield self.assert_redis_string("batches:event_count:mybatch", "1")
+        yield self.assert_redis_hash("batches:status:mybatch", {
+            "sent": "0",
+            "ack": "1",
+            "nack": "0",
+            "delivery_report": "0",
+            "delivery_report.delivered": "0",
+            "delivery_report.failed": "0",
+            "delivery_report.pending": "0",
+        })
+
+    @inlineCallbacks
+    def test_add_event_key_truncates_zset(self):
+        """
+        When our event zset is full, adding a new event key truncates it by
+        removing the oldest entries.
+        """
+        self.batch_info_cache.TRUNCATE_MESSAGE_KEY_ZSET_AT = 3
+        start = to_timestamp(datetime.utcnow()) - 10
+        events = [("event%d" % i, "ack", start + i) for i in range(5)]
+        redis_events = [(k, t) for k, _, t in events]
+        yield self.batch_info_cache.batch_start("batch")
+
+        yield self.batch_info_cache.add_event_key("batch", *events[0])
+        yield self.assert_redis_zset("batches:event:batch", redis_events[:1])
+        yield self.batch_info_cache.add_event_key("batch", *events[1])
+        yield self.assert_redis_zset("batches:event:batch", redis_events[:2])
+        yield self.batch_info_cache.add_event_key("batch", *events[2])
+        yield self.assert_redis_zset("batches:event:batch", redis_events[:3])
+        yield self.batch_info_cache.add_event_key("batch", *events[3])
+        yield self.assert_redis_zset("batches:event:batch", redis_events[1:4])
+        yield self.batch_info_cache.add_event_key("batch", *events[4])
+        yield self.assert_redis_zset("batches:event:batch", redis_events[2:5])
+        yield self.assert_redis_string("batches:event_count:batch", "5")
+
+    @inlineCallbacks
+    def test_add_inbound_message_count(self):
+        """
+        Inbound message counters can be incremented in bulk.
+        """
+        yield self.batch_info_cache.batch_start("mybatch")
+        yield self.batch_info_cache.add_inbound_message_count("mybatch", 10)
+
+        yield self.assert_redis_keys([
+            "batches",
+            "batches:inbound_count:mybatch",
+            "batches:outbound_count:mybatch",
+            "batches:event_count:mybatch",
+            "batches:status:mybatch",
+        ])
+
+        yield self.assert_redis_string("batches:inbound_count:mybatch", "10")
+        yield self.assert_redis_string("batches:outbound_count:mybatch", "0")
+        yield self.assert_redis_string("batches:event_count:mybatch", "0")
+        yield self.assert_redis_hash("batches:status:mybatch", {
+            "sent": "0",
+            "ack": "0",
+            "nack": "0",
+            "delivery_report": "0",
+            "delivery_report.delivered": "0",
+            "delivery_report.failed": "0",
+            "delivery_report.pending": "0",
+        })
+
+    @inlineCallbacks
+    def test_add_outbound_message_count(self):
+        """
+        Outbound message counters can be incremented in bulk.
+        """
+        yield self.batch_info_cache.batch_start("mybatch")
+        yield self.batch_info_cache.add_outbound_message_count("mybatch", 10)
+
+        yield self.assert_redis_keys([
+            "batches",
+            "batches:inbound_count:mybatch",
+            "batches:outbound_count:mybatch",
+            "batches:event_count:mybatch",
+            "batches:status:mybatch",
+        ])
+
+        yield self.assert_redis_string("batches:inbound_count:mybatch", "0")
+        yield self.assert_redis_string("batches:outbound_count:mybatch", "10")
+        yield self.assert_redis_string("batches:event_count:mybatch", "0")
+        yield self.assert_redis_hash("batches:status:mybatch", {
+            "sent": "10",
+            "ack": "0",
+            "nack": "0",
+            "delivery_report": "0",
+            "delivery_report.delivered": "0",
+            "delivery_report.failed": "0",
+            "delivery_report.pending": "0",
+        })
+
+    @inlineCallbacks
+    def test_add_event_count(self):
+        """
+        Event counters can be incremented in bulk.
+        """
+        yield self.batch_info_cache.batch_start("mybatch")
+        yield self.batch_info_cache.add_event_count("mybatch", "ack", 7)
+        yield self.batch_info_cache.add_event_count(
+            "mybatch", "delivery_report.delivered", 3)
+
+        yield self.assert_redis_keys([
+            "batches",
+            "batches:inbound_count:mybatch",
+            "batches:outbound_count:mybatch",
+            "batches:event_count:mybatch",
+            "batches:status:mybatch",
+        ])
+
+        yield self.assert_redis_string("batches:inbound_count:mybatch", "0")
+        yield self.assert_redis_string("batches:outbound_count:mybatch", "0")
+        yield self.assert_redis_string("batches:event_count:mybatch", "10")
+        yield self.assert_redis_hash("batches:status:mybatch", {
+            "sent": "0",
+            "ack": "7",
+            "nack": "0",
+            "delivery_report": "3",
+            "delivery_report.delivered": "3",
+            "delivery_report.failed": "0",
+            "delivery_report.pending": "0",
+        })
+
+    @inlineCallbacks
+    def test_get_batch_status(self):
+        """
+        The batch status can be retrieved as a dict of ints.
+        """
+        yield self.batch_info_cache.batch_start("mybatch")
+        yield self.batch_info_cache.add_inbound_message_count("mybatch", 4)
+        yield self.batch_info_cache.add_outbound_message_count("mybatch", 3)
+        yield self.batch_info_cache.add_event_count("mybatch", "ack", 2)
+        yield self.batch_info_cache.add_event_count(
+            "mybatch", "delivery_report.delivered", 1)
+        yield self.assert_redis_hash("batches:status:mybatch", {
+            "sent": "3",
+            "ack": "2",
+            "nack": "0",
+            "delivery_report": "1",
+            "delivery_report.delivered": "1",
+            "delivery_report.failed": "0",
+            "delivery_report.pending": "0",
+        })
+
+        batch_status = yield self.batch_info_cache.get_batch_status("mybatch")
+        self.assertEqual(batch_status, {
+            "sent": 3,
+            "ack": 2,
+            "nack": 0,
+            "delivery_report": 1,
+            "delivery_report.delivered": 1,
+            "delivery_report.failed": 0,
+            "delivery_report.pending": 0,
+        })
+
+    @inlineCallbacks
+    def test_get_batch_status_no_batch(self):
+        """
+        The batch status is empty for a batch that doesn't exist.
+        """
+        batch_status = yield self.batch_info_cache.get_batch_status("mybatch")
+        self.assertEqual(batch_status, {})
+
+    @inlineCallbacks
+    def test_list_inbound_message_keys(self):
+        """
+        The list of recent inbound message keys can be retrieved with or
+        without timestamps, ordered from newest to oldest.
+        """
+        yield self.batch_info_cache.batch_start("batch")
+        start = to_timestamp(datetime.utcnow()) - 10
+        msgs = [("message%d" % i, start + i) for i in range(5)]
+        for msg in msgs:
+            yield self.batch_info_cache.add_inbound_message_key(
+                "batch", *msg)
+        yield self.assert_redis_zset("batches:inbound:batch", msgs)
+
+        keys = yield self.batch_info_cache.list_inbound_message_keys("batch")
+        self.assertEqual(keys, [k for k, _ in reversed(msgs)])
+        tkeys = yield self.batch_info_cache.list_inbound_message_keys(
+            "batch", with_timestamp=True)
+        self.assertEqual(tkeys, list(reversed(msgs)))
+
+    @inlineCallbacks
+    def test_list_inbound_message_keys_empty_batch(self):
+        """
+        The list of recent inbound message keys is empty when there are no
+        messages in the batch.
+        """
+        yield self.batch_info_cache.batch_start("batch")
+        yield self.assert_redis_zset("batches:inbound:batch", [])
+
+        keys = yield self.batch_info_cache.list_inbound_message_keys("batch")
+        self.assertEqual(keys, [])
+        tkeys = yield self.batch_info_cache.list_inbound_message_keys(
+            "batch", with_timestamp=True)
+        self.assertEqual(tkeys, [])
+
+    @inlineCallbacks
+    def test_list_outbound_message_keys(self):
+        """
+        The list of recent outbound message keys can be retrieved with or
+        without timestamps, ordered from newest to oldest.
+        """
+        yield self.batch_info_cache.batch_start("batch")
+        start = to_timestamp(datetime.utcnow()) - 10
+        msgs = [("message%d" % i, start + i) for i in range(5)]
+        for msg in msgs:
+            yield self.batch_info_cache.add_outbound_message_key(
+                "batch", *msg)
+        yield self.assert_redis_zset("batches:outbound:batch", msgs)
+
+        keys = yield self.batch_info_cache.list_outbound_message_keys("batch")
+        self.assertEqual(keys, [k for k, _ in reversed(msgs)])
+        tkeys = yield self.batch_info_cache.list_outbound_message_keys(
+            "batch", with_timestamp=True)
+        self.assertEqual(tkeys, list(reversed(msgs)))
+
+    @inlineCallbacks
+    def test_list_outbound_message_keys_empty_batch(self):
+        """
+        The list of recent outbound message keys is empty when there are no
+        messages in the batch.
+        """
+        yield self.batch_info_cache.batch_start("batch")
+        yield self.assert_redis_zset("batches:outbound:batch", [])
+
+        keys = yield self.batch_info_cache.list_outbound_message_keys("batch")
+        self.assertEqual(keys, [])
+        tkeys = yield self.batch_info_cache.list_outbound_message_keys(
+            "batch", with_timestamp=True)
+        self.assertEqual(tkeys, [])
+
+    @inlineCallbacks
+    def test_list_event_keys(self):
+        """
+        The list of recent event keys can be retrieved with or without
+        timestamps, ordered from newest to oldest.
+        """
+        yield self.batch_info_cache.batch_start("batch")
+        start = to_timestamp(datetime.utcnow()) - 10
+        addevents = [("event%d" % i, "ack", start + i) for i in range(5)]
+        for event in addevents:
+            yield self.batch_info_cache.add_event_key("batch", *event)
+        events = [(k, t) for k, _, t in addevents]
+        yield self.assert_redis_zset("batches:event:batch", events)
+
+        keys = yield self.batch_info_cache.list_event_keys("batch")
+        self.assertEqual(keys, [k for k, _ in reversed(events)])
+        tkeys = yield self.batch_info_cache.list_event_keys(
+            "batch", with_timestamp=True)
+        self.assertEqual(tkeys, list(reversed(events)))
+
+    @inlineCallbacks
+    def test_list_event_keys_empty_batch(self):
+        """
+        The list of recent outbound message keys is empty when there are no
+        messages in the batch.
+        """
+        yield self.batch_info_cache.batch_start("batch")
+        yield self.assert_redis_zset("batches:outbound:batch", [])
+
+        keys = yield self.batch_info_cache.list_event_keys("batch")
+        self.assertEqual(keys, [])
+        tkeys = yield self.batch_info_cache.list_event_keys(
+            "batch", with_timestamp=True)
+        self.assertEqual(tkeys, [])
+
+    @inlineCallbacks
+    def test_get_inbound_message_count(self):
+        """
+        The inbound message count can be queried.
+        """
+        yield self.batch_info_cache.batch_start("batch")
+        yield self.batch_info_cache.add_inbound_message_count("batch", 5000)
+        yield self.batch_info_cache.add_inbound_message_key(
+            "batch", "foo", to_timestamp(datetime.utcnow()))
+
+        count = yield self.batch_info_cache.get_inbound_message_count("batch")
+        self.assertEqual(count, 5001)
+
+    @inlineCallbacks
+    def test_get_inbound_message_count_no_batch(self):
+        """
+        The inbound message count returns zero for missing batches.
+        """
+        count = yield self.batch_info_cache.get_inbound_message_count("batch")
+        self.assertEqual(count, 0)
+
+    @inlineCallbacks
+    def test_get_outbound_message_count(self):
+        """
+        The outbound message count can be queried.
+        """
+        yield self.batch_info_cache.batch_start("batch")
+        yield self.batch_info_cache.add_outbound_message_count("batch", 5000)
+        yield self.batch_info_cache.add_outbound_message_key(
+            "batch", "foo", to_timestamp(datetime.utcnow()))
+
+        count = yield self.batch_info_cache.get_outbound_message_count("batch")
+        self.assertEqual(count, 5001)
+
+    @inlineCallbacks
+    def test_get_outbound_message_count_no_batch(self):
+        """
+        The outbound message count returns zero for missing batches.
+        """
+        count = yield self.batch_info_cache.get_outbound_message_count("batch")
+        self.assertEqual(count, 0)
+
+    @inlineCallbacks
+    def test_get_event_count(self):
+        """
+        The event count can be queried.
+        """
+        yield self.batch_info_cache.batch_start("batch")
+        yield self.batch_info_cache.add_event_count("batch", "ack", 5000)
+        yield self.batch_info_cache.add_event_key(
+            "batch", "foo", "delivery_report.delivered",
+            to_timestamp(datetime.utcnow()))
+
+        count = yield self.batch_info_cache.get_event_count("batch")
+        self.assertEqual(count, 5001)
+
+    @inlineCallbacks
+    def test_get_event_count_no_batch(self):
+        """
+        The outbound message count returns zero for missing batches.
+        """
+        count = yield self.batch_info_cache.get_event_count("batch")
+        self.assertEqual(count, 0)
