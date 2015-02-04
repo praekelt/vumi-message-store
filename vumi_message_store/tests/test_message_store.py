@@ -1245,6 +1245,67 @@ class TestQueryMessageStore(VumiTestCase):
         self.assertEqual(list(keys_page), [])
 
     @inlineCallbacks
+    def test_list_message_event_keys_with_statuses(self):
+        """
+        When we ask for a list of event keys with statuses, we get an
+        IndexPageWrapper containing the first page of results and can ask for
+        following pages until all results are delivered.
+        """
+        batch_id = yield self.backend.batch_start()
+        start = datetime.utcnow() - timedelta(seconds=10)
+        msg = self.msg_helper.make_outbound("hello", timestamp=start)
+        yield self.backend.add_outbound_message(msg, batch_ids=[batch_id])
+        ack = self.msg_helper.make_ack(msg, timestamp=start)
+        yield self.backend.add_event(ack)
+        drs = [
+            self.msg_helper.make_delivery_report(
+                msg, timestamp=(start + timedelta(seconds=1))),
+            self.msg_helper.make_delivery_report(
+                msg, timestamp=(start + timedelta(seconds=2))),
+            self.msg_helper.make_delivery_report(
+                msg, timestamp=(start + timedelta(seconds=3))),
+            self.msg_helper.make_delivery_report(
+                msg, timestamp=(start + timedelta(seconds=4))),
+        ]
+        all_keys = [(ack["event_id"], vumi_date(ack["timestamp"]), "ack")]
+        for dr in drs:
+            yield self.backend.add_event(dr)
+            all_keys.append(
+                (dr["event_id"], vumi_date(dr["timestamp"]),
+                 "delivery_report.delivered"))
+
+        keys_p1 = yield self.store.list_message_event_keys_with_statuses(
+            msg["message_id"], max_results=3)
+        # Paginated results are sorted by timestamp.
+        self.assertEqual(list(keys_p1), all_keys[:3])
+
+        keys_p2 = yield keys_p1.next_page()
+        self.assertEqual(list(keys_p2), all_keys[3:])
+
+    @inlineCallbacks
+    def test_list_message_event_keys_with_statuses_no_events(self):
+        """
+        When we ask for a list of event keys with statuses for a message with
+        no events, we get an empty IndexPageWrapper.
+        """
+        batch_id = yield self.backend.batch_start()
+        msg = self.msg_helper.make_outbound("hello")
+        yield self.backend.add_outbound_message(msg, batch_ids=[batch_id])
+        keys_page = yield self.store.list_message_event_keys_with_statuses(
+            msg["message_id"])
+        self.assertEqual(list(keys_page), [])
+
+    @inlineCallbacks
+    def test_list_message_event_keys_with_statuses_no_message(self):
+        """
+        When we ask for a list of event keys with statuses for a message that
+        does not exist, we get an empty IndexPageWrapper.
+        """
+        keys_page = yield self.store.list_message_event_keys_with_statuses(
+            "badmsg")
+        self.assertEqual(list(keys_page), [])
+
+    @inlineCallbacks
     def test_get_batch_info_status(self):
         """
         The batch status can be retrieved as a dict of ints.

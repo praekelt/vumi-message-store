@@ -273,6 +273,61 @@ class IQueryMessageStore(Interface):
             If async, a Deferred is returned instead.
         """
 
+    def list_batch_inbound_keys_with_addresses(batch_id, start=None, end=None):
+        """
+        List inbound message keys with timestamps and source addresses for the
+        given batch.
+
+        :param batch_id:
+            The batch identifier for the batch to operate on.
+
+        :param start:
+            Timestamp denoting the start of a range query.
+
+        :param end:
+            Timestamp denoting the end of a range query.
+
+        :returns:
+            An IndexPage object containing a list of tuples of inbound message
+            key, timestamp, and from_addr.
+            If async, a Deferred is returned instead.
+        """
+
+    def list_batch_outbound_keys_with_addresses(batch_id, start=None,
+                                                end=None):
+        """
+        List outbound message keys with timestamps and destination addresses
+        for the given batch.
+
+        :param batch_id:
+            The batch identifier for the batch to operate on.
+
+        :param start:
+            Timestamp denoting the start of a range query.
+
+        :param end:
+            Timestamp denoting the end of a range query.
+
+        :returns:
+            An IndexPage object containing a list of tuples of outbound message
+            key, timestamp, and to_addr.
+            If async, a Deferred is returned instead.
+        """
+
+    def list_message_event_keys_with_statuses(message_id):
+        """
+        List event keys with timestamps and statuses for the given outbound
+        message.
+
+        :param message_id:
+            The message identifier to find events for.
+
+        :returns:
+            An IndexPage object containing a list tupled of event key,
+            timestamp, and event status.
+            If async, a Deferred is returned instead.
+        """
+
     def get_batch_info_status(batch_id):
         """
         Return a dictionary containing the latest event stats for the given

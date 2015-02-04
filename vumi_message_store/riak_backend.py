@@ -262,7 +262,7 @@ class MessageStoreRiakBackend(object):
             'batches_with_addresses', start_value, end_value,
             return_terms=True, max_results=max_results)
         returnValue(IndexPageWrapper(
-            key_with_address_formatter, self, batch_id, results))
+            key_with_ts_and_value_formatter, self, batch_id, results))
 
     @Manager.calls_manager
     def list_batch_outbound_keys_with_addresses(self, batch_id, start=None,
@@ -278,7 +278,23 @@ class MessageStoreRiakBackend(object):
             'batches_with_addresses', start_value, end_value,
             return_terms=True, max_results=max_results)
         returnValue(IndexPageWrapper(
-            key_with_address_formatter, self, batch_id, results))
+            key_with_ts_and_value_formatter, self, batch_id, results))
+
+    @Manager.calls_manager
+    def list_message_event_keys_with_statuses(self, message_id,
+                                              max_results=None):
+        """
+        List event keys with timestamps and statuses for the given outbound
+        message.
+        """
+        if max_results is None:
+            max_results = self.DEFAULT_MAX_RESULTS
+        start_value, end_value = self._start_end_values(message_id, None, None)
+        results = yield self.events.index_keys_page(
+            'message_with_status', start_value, end_value, return_terms=True,
+            max_results=max_results)
+        returnValue(IndexPageWrapper(
+            key_with_ts_and_value_formatter, self, message_id, results))
 
 
 class IndexPageWrapper(object):
@@ -342,7 +358,7 @@ def key_with_timestamp_formatter(batch_id, result):
     return (key, value[len(prefix):])
 
 
-def key_with_address_formatter(batch_id, result):
+def key_with_ts_and_value_formatter(batch_id, result):
     value, key = result
     prefix = batch_id + "$"
     if not value.startswith(prefix):

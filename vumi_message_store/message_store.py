@@ -223,6 +223,15 @@ class QueryMessageStore(object):
         return self.riak_backend.list_batch_outbound_keys_with_addresses(
             batch_id, start=start, end=end, max_results=max_results)
 
+    def list_message_event_keys_with_statuses(self, message_id,
+                                              max_results=None):
+        """
+        List event keys with timestamps and statuses for the given outbound
+        message.
+        """
+        return self.riak_backend.list_message_event_keys_with_statuses(
+            message_id, max_results=max_results)
+
     def get_batch_info_status(self, batch_id):
         """
         Return a dictionary containing the latest event stats for the given
