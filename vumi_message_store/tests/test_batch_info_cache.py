@@ -2,12 +2,13 @@
 
 """Tests for vumi_message_store.batch_info_cache."""
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from twisted.internet.defer import inlineCallbacks
 from vumi.tests.helpers import VumiTestCase, MessageHelper, PersistenceHelper
 
 from vumi_message_store.batch_info_cache import to_timestamp, BatchInfoCache
+from vumi_message_store.message_store import QueryMessageStore
 
 
 class TestBatchInfoCacheUtils(VumiTestCase):
@@ -912,3 +913,200 @@ class TestBatchInfoCache(VumiTestCase):
         """
         count = yield self.batch_info_cache.get_event_count("batch")
         self.assertEqual(count, 0)
+
+    @inlineCallbacks
+    def test_rebuild_cache(self):
+        """
+        Rebuilding the cache will clear all cached data and rebuild it from the
+        given QueryMessageStore.
+        """
+        riak_persistence_helper = self.add_helper(
+            PersistenceHelper(use_riak=True))
+        manager = riak_persistence_helper.get_riak_manager()
+        qms = QueryMessageStore(manager, self.redis)
+        backend = qms.riak_backend
+
+        start = datetime.utcnow() - timedelta(seconds=10)
+
+        # Fill the message store backend with the data we want in the rebuilt
+        # cache.
+        inbound_keys = []
+        for i in range(5):
+            msg = self.msg_helper.make_inbound(
+                "in %s" % (i,), timestamp=(start + timedelta(seconds=i)))
+            inbound_keys.append(
+                (msg["message_id"], to_timestamp(msg["timestamp"])))
+            yield backend.add_inbound_message(msg, batch_ids=["mybatch"])
+
+        outbound_msgs = []
+        outbound_keys = []
+        for i in range(4):
+            msg = self.msg_helper.make_outbound(
+                "out %s" % (i,), timestamp=(start + timedelta(seconds=i)))
+            outbound_msgs.append(msg)
+            outbound_keys.append(
+                (msg["message_id"], to_timestamp(msg["timestamp"])))
+            yield backend.add_outbound_message(msg, batch_ids=["mybatch"])
+
+        events = [
+            self.msg_helper.make_nack(
+                outbound_msgs[0], timestamp=(start + timedelta(seconds=1))),
+            self.msg_helper.make_ack(
+                outbound_msgs[1], timestamp=(start + timedelta(seconds=2))),
+            self.msg_helper.make_delivery_report(
+                outbound_msgs[1], timestamp=(start + timedelta(seconds=3))),
+        ]
+        event_keys = []
+        for event in events:
+            event_keys.append(
+                (event["event_id"], to_timestamp(event["timestamp"])))
+            yield backend.add_event(event)
+
+        # Fill the cache with some nonsense that we want to throw out when
+        # rebuilding.
+        yield self.batch_info_cache.add_inbound_message_key(
+            "mybatch", "inmsg", 12345)
+        yield self.batch_info_cache.add_outbound_message_key(
+            "mybatch", "outmsg", 23456)
+        yield self.batch_info_cache.add_event_key(
+            "mybatch", "event", "ack", 34567)
+        yield self.assert_redis_string("batches:inbound_count:mybatch", "1")
+        yield self.assert_redis_string("batches:outbound_count:mybatch", "1")
+        yield self.assert_redis_string("batches:event_count:mybatch", "1")
+
+        # Rebuild the cache.
+        yield self.batch_info_cache.rebuild_cache("mybatch", qms)
+        yield self.assert_redis_keys([
+            "batches",
+            "batches:inbound:mybatch",
+            "batches:outbound:mybatch",
+            "batches:event:mybatch",
+            "batches:inbound_count:mybatch",
+            "batches:outbound_count:mybatch",
+            "batches:event_count:mybatch",
+            "batches:status:mybatch",
+        ])
+        yield self.assert_redis_set("batches", ["mybatch"])
+        yield self.assert_redis_string("batches:inbound_count:mybatch", "5")
+        yield self.assert_redis_string("batches:outbound_count:mybatch", "4")
+        yield self.assert_redis_string("batches:event_count:mybatch", "3")
+        yield self.assert_redis_hash("batches:status:mybatch", {
+            "sent": "4",
+            "ack": "1",
+            "nack": "1",
+            "delivery_report": "1",
+            "delivery_report.delivered": "1",
+            "delivery_report.failed": "0",
+            "delivery_report.pending": "0",
+        })
+        yield self.assert_redis_zset("batches:inbound:mybatch", inbound_keys)
+        yield self.assert_redis_zset("batches:outbound:mybatch", outbound_keys)
+        yield self.assert_redis_zset("batches:event:mybatch", event_keys)
+
+    @inlineCallbacks
+    def test_rebuild_cache_uncached_batch(self):
+        """
+        Rebuilding the cache for a batch works even if the batch is not cached.
+        """
+        riak_persistence_helper = self.add_helper(
+            PersistenceHelper(use_riak=True))
+        manager = riak_persistence_helper.get_riak_manager()
+        qms = QueryMessageStore(manager, self.redis)
+        backend = qms.riak_backend
+
+        start = datetime.utcnow() - timedelta(seconds=10)
+
+        inbound_keys = []
+        for i in range(5):
+            msg = self.msg_helper.make_inbound(
+                "in %s" % (i,), timestamp=(start + timedelta(seconds=i)))
+            inbound_keys.append(
+                (msg["message_id"], to_timestamp(msg["timestamp"])))
+            yield backend.add_inbound_message(msg, batch_ids=["mybatch"])
+
+        outbound_msgs = []
+        outbound_keys = []
+        for i in range(4):
+            msg = self.msg_helper.make_outbound(
+                "out %s" % (i,), timestamp=(start + timedelta(seconds=i)))
+            outbound_msgs.append(msg)
+            outbound_keys.append(
+                (msg["message_id"], to_timestamp(msg["timestamp"])))
+            yield backend.add_outbound_message(msg, batch_ids=["mybatch"])
+
+        events = [
+            self.msg_helper.make_nack(
+                outbound_msgs[0], timestamp=(start + timedelta(seconds=1))),
+            self.msg_helper.make_ack(
+                outbound_msgs[1], timestamp=(start + timedelta(seconds=2))),
+            self.msg_helper.make_delivery_report(
+                outbound_msgs[1], timestamp=(start + timedelta(seconds=3))),
+        ]
+        event_keys = []
+        for event in events:
+            event_keys.append(
+                (event["event_id"], to_timestamp(event["timestamp"])))
+            yield backend.add_event(event)
+
+        yield self.assert_redis_keys([])
+        yield self.batch_info_cache.rebuild_cache("mybatch", qms)
+        yield self.assert_redis_keys([
+            "batches",
+            "batches:inbound:mybatch",
+            "batches:outbound:mybatch",
+            "batches:event:mybatch",
+            "batches:inbound_count:mybatch",
+            "batches:outbound_count:mybatch",
+            "batches:event_count:mybatch",
+            "batches:status:mybatch",
+        ])
+        yield self.assert_redis_set("batches", ["mybatch"])
+        yield self.assert_redis_string("batches:inbound_count:mybatch", "5")
+        yield self.assert_redis_string("batches:outbound_count:mybatch", "4")
+        yield self.assert_redis_string("batches:event_count:mybatch", "3")
+        yield self.assert_redis_hash("batches:status:mybatch", {
+            "sent": "4",
+            "ack": "1",
+            "nack": "1",
+            "delivery_report": "1",
+            "delivery_report.delivered": "1",
+            "delivery_report.failed": "0",
+            "delivery_report.pending": "0",
+        })
+        yield self.assert_redis_zset("batches:inbound:mybatch", inbound_keys)
+        yield self.assert_redis_zset("batches:outbound:mybatch", outbound_keys)
+        yield self.assert_redis_zset("batches:event:mybatch", event_keys)
+
+    @inlineCallbacks
+    def test_rebuild_cache_missing_batch(self):
+        """
+        Rebuilding a cache for a batch that doesn't exist is equivalent to
+        creating an empty cache for the batch.
+        """
+        riak_persistence_helper = self.add_helper(
+            PersistenceHelper(use_riak=True))
+        manager = riak_persistence_helper.get_riak_manager()
+        qms = QueryMessageStore(manager, self.redis)
+
+        yield self.assert_redis_keys([])
+        yield self.batch_info_cache.rebuild_cache("mybatch", qms)
+        yield self.assert_redis_keys([
+            "batches",
+            "batches:inbound_count:mybatch",
+            "batches:outbound_count:mybatch",
+            "batches:event_count:mybatch",
+            "batches:status:mybatch",
+        ])
+        yield self.assert_redis_set("batches", ["mybatch"])
+        yield self.assert_redis_string("batches:inbound_count:mybatch", "0")
+        yield self.assert_redis_string("batches:outbound_count:mybatch", "0")
+        yield self.assert_redis_string("batches:event_count:mybatch", "0")
+        yield self.assert_redis_hash("batches:status:mybatch", {
+            "sent": "0",
+            "ack": "0",
+            "nack": "0",
+            "delivery_report": "0",
+            "delivery_report.delivered": "0",
+            "delivery_report.failed": "0",
+            "delivery_report.pending": "0",
+        })

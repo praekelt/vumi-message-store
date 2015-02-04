@@ -291,10 +291,51 @@ class BatchInfoCache(object):
         returnValue(0 if count is None else int(count))
 
     def get_inbound_message_count(self, batch_id):
+        """
+        Return the count of inbound messages.
+        """
         return self._get_counter_value(self.inbound_count_key(batch_id))
 
     def get_outbound_message_count(self, batch_id):
+        """
+        Return the count of outbound messages.
+        """
         return self._get_counter_value(self.outbound_count_key(batch_id))
 
     def get_event_count(self, batch_id):
+        """
+        Return the count of events.
+        """
         return self._get_counter_value(self.event_count_key(batch_id))
+
+    @Manager.calls_manager
+    def rebuild_cache(self, batch_id, qms, page_size=None):
+        """
+        Rebuild the cache using the provided IQueryMessageStore implementation.
+        """
+        # TODO: Make this less naive.
+        yield self.clear_batch(batch_id)
+        yield self.batch_start(batch_id)
+
+        inbound_page = yield qms.list_batch_inbound_keys_with_timestamps(
+            batch_id, max_results=page_size)
+        while inbound_page is not None:
+            for key, timestamp in inbound_page:
+                yield self.add_inbound_message_key(
+                    batch_id, key, to_timestamp(timestamp))
+            inbound_page = yield inbound_page.next_page()
+
+        outbound_page = yield qms.list_batch_outbound_keys_with_timestamps(
+            batch_id, max_results=page_size)
+        while outbound_page is not None:
+            for key, timestamp in outbound_page:
+                yield self.add_outbound_message_key(
+                    batch_id, key, to_timestamp(timestamp))
+                event_page = yield qms.list_message_event_keys_with_statuses(
+                    key)
+                while event_page is not None:
+                    for ekey, etimestamp, status in event_page:
+                        yield self.add_event_key(
+                            batch_id, ekey, status, to_timestamp(etimestamp))
+                    event_page = yield event_page.next_page()
+            outbound_page = yield outbound_page.next_page()
