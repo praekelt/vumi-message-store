@@ -17,14 +17,14 @@ class TestBatchInfoCacheUtils(VumiTestCase):
         We can convert a datetime object to a unix timestamp.
         """
         timestamp = to_timestamp(datetime(2015, 1, 26, 19, 22, 05))
-        self.assertEqual(timestamp, 1422292925.0)
+        self.assertEqual(timestamp, 1422300125)
 
     def test_to_timestamp_vumi_format_string(self):
         """
         We can convert a VUMI_DATE_FORMAT string to a unix timestamp.
         """
         timestamp = to_timestamp("2015-01-26 19:22:05.000")
-        self.assertEqual(timestamp, 1422292925.0)
+        self.assertEqual(timestamp, 1422300125)
 
 
 class TestBatchInfoCache(VumiTestCase):

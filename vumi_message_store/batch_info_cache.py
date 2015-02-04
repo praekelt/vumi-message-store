@@ -1,8 +1,8 @@
 # -*- test-case-name: vumi_message_store.tests.test_batch_info_cache -*-
 # -*- coding: utf-8 -*-
 
+from calendar import timegm
 from datetime import datetime
-import time
 
 from twisted.internet.defer import returnValue
 
@@ -17,7 +17,10 @@ def to_timestamp(timestamp):
     """
     if isinstance(timestamp, basestring):
         timestamp = datetime.strptime(timestamp, VUMI_DATE_FORMAT)
-    return time.mktime(timestamp.timetuple())
+    # We can't use time.mktime(), because that takes local time and we have
+    # UTC. The UTC equivalent, for some obscure reason, is in the calendar
+    # module.
+    return timegm(timestamp.timetuple())
 
 
 class BatchInfoCacheException(VumiError):
