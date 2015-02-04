@@ -1,31 +1,43 @@
 """
 Tests for vumi_message_store.message_store.
 """
+from datetime import datetime, timedelta
 
 from twisted.internet.defer import inlineCallbacks
+from vumi.message import VUMI_DATE_FORMAT
 from vumi.tests.helpers import VumiTestCase, MessageHelper, PersistenceHelper
 from zope.interface.verify import verifyObject
 
+from vumi_message_store.batch_info_cache import to_timestamp
 from vumi_message_store.interfaces import (
     IMessageStoreBatchManager, IOperationalMessageStore, IQueryMessageStore)
 from vumi_message_store.message_store import (
-    RiakOnlyMessageStoreBatchManager, RiakOnlyOperationalMessageStore,
-    RiakOnlyQueryMessageStore)
+    MessageStoreBatchManager, OperationalMessageStore, QueryMessageStore)
+
+
+def vumi_date(timestamp):
+    """
+    Turn a datetime object into a VUMI_DATE_FORMAT string.
+    """
+    return datetime.strftime(timestamp, VUMI_DATE_FORMAT)
 
 
 # TODO: Better way to test indexes.
 
 
-class TestRiakOnlyMessageStoreBatchManager(VumiTestCase):
+class TestMessageStoreBatchManager(VumiTestCase):
 
+    @inlineCallbacks
     def setUp(self):
         self.persistence_helper = self.add_helper(
             PersistenceHelper(use_riak=True))
         self.manager = self.persistence_helper.get_riak_manager()
-        self.batch_manager = RiakOnlyMessageStoreBatchManager(self.manager)
+        self.redis = yield self.persistence_helper.get_redis_manager()
+        self.batch_manager = MessageStoreBatchManager(self.manager, self.redis)
         self.backend = self.batch_manager.riak_backend
+        self.bi_cache = self.batch_manager.batch_info_cache
 
-    def test_implements_IOperationalMessageStore(self):
+    def test_implements_IMessageStoreBatchManager(self):
         """
         MessageStoreBatchManager implements the IMessageStoreBatchManager
         interface.
@@ -43,6 +55,8 @@ class TestRiakOnlyMessageStoreBatchManager(VumiTestCase):
         batch_id = yield self.batch_manager.batch_start()
         stored_batch = yield self.backend.get_batch(batch_id)
         self.assertEqual(set(stored_batch.tags), set())
+        batch_exists_in_cache = yield self.bi_cache.batch_exists(batch_id)
+        self.assertEqual(batch_exists_in_cache, True)
 
     @inlineCallbacks
     def test_batch_start_with_tags(self):
@@ -60,6 +74,8 @@ class TestRiakOnlyMessageStoreBatchManager(VumiTestCase):
         self.assertEqual(loose_cut_record.current_batch.key, batch_id)
         large_size_record = yield self.backend.get_tag_info("size:large")
         self.assertEqual(large_size_record.current_batch.key, batch_id)
+        batch_exists_in_cache = yield self.bi_cache.batch_exists(batch_id)
+        self.assertEqual(batch_exists_in_cache, True)
 
     @inlineCallbacks
     def test_batch_start_with_metadata(self):
@@ -74,6 +90,8 @@ class TestRiakOnlyMessageStoreBatchManager(VumiTestCase):
         self.assertEqual(
             dict(stored_batch.metadata.items()),
             {u"meta": u"alt", u"data": u"stuff"})
+        batch_exists_in_cache = yield self.bi_cache.batch_exists(batch_id)
+        self.assertEqual(batch_exists_in_cache, True)
 
     @inlineCallbacks
     def test_batch_done(self):
@@ -132,6 +150,19 @@ class TestRiakOnlyMessageStoreBatchManager(VumiTestCase):
         self.assertEqual(tag_info.current_batch.key, "mybatch")
 
     @inlineCallbacks
+    def test_get_tag_info_tuple_form(self):
+        """
+        We can specify the tag as a (pool, tagname) tuple.
+        """
+        # We use the internals of the backend here because there's no other
+        # direct way to create a CurrentTag object.
+        stored_tag = self.backend.current_tags(
+            "size:large", current_batch="mybatch")
+        yield stored_tag.save()
+        tag_info = yield self.batch_manager.get_tag_info(("size", "large"))
+        self.assertEqual(tag_info.current_batch.key, "mybatch")
+
+    @inlineCallbacks
     def test_get_tag_info_missing_tag(self):
         """
         If we ask for tag info that doesn't exist, we get a new CurrentTag
@@ -141,19 +172,22 @@ class TestRiakOnlyMessageStoreBatchManager(VumiTestCase):
         self.assertEqual(tag_info.current_batch.key, None)
 
 
-class TestRiakOnlyOperationalMessageStore(VumiTestCase):
+class TestOperationalMessageStore(VumiTestCase):
 
+    @inlineCallbacks
     def setUp(self):
         self.persistence_helper = self.add_helper(
             PersistenceHelper(use_riak=True))
         self.manager = self.persistence_helper.get_riak_manager()
-        self.store = RiakOnlyOperationalMessageStore(self.manager)
+        self.redis = yield self.persistence_helper.get_redis_manager()
+        self.store = OperationalMessageStore(self.manager, self.redis)
         self.backend = self.store.riak_backend
+        self.bi_cache = self.store.batch_info_cache
         self.msg_helper = self.add_helper(MessageHelper())
 
     def test_implements_IOperationalMessageStore(self):
         """
-        RiakOnlyOperationalMessageStore implements the IOperationalMessageStore
+        OperationalMessageStore implements the IOperationalMessageStore
         interface.
         """
         self.assertTrue(IOperationalMessageStore.providedBy(self.store))
@@ -197,14 +231,18 @@ class TestRiakOnlyOperationalMessageStore(VumiTestCase):
     def test_add_inbound_message_with_batch_id(self):
         """
         When an inbound message is added with a batch identifier, that batch
-        identifier is stored with it and indexed.
+        identifier is stored with it and indexed. Additionally, it is added to
+        the batch info cache.
         """
+        yield self.bi_cache.batch_start("mybatch")
         msg = self.msg_helper.make_inbound("apples")
         yield self.store.add_inbound_message(msg, batch_ids=["mybatch"])
         stored_msg = yield self.backend.get_raw_inbound_message(
             msg["message_id"])
         self.assertEqual(stored_msg.msg, msg)
         self.assertEqual(stored_msg.batches.keys(), ["mybatch"])
+        batch_keys = yield self.bi_cache.list_inbound_message_keys("mybatch")
+        self.assertEqual(set(batch_keys), set([msg["message_id"]]))
 
         # Make sure we're writing the right indexes.
         self.assertEqual(stored_msg._riak_object.get_indexes(), set([
@@ -219,8 +257,11 @@ class TestRiakOnlyOperationalMessageStore(VumiTestCase):
     def test_add_inbound_message_with_multiple_batch_ids(self):
         """
         When an inbound message is added with multiple batch identifiers, it
-        belongs to all the specified batches.
+        belongs to all the specified batches and is added to all their info
+        caches.
         """
+        yield self.bi_cache.batch_start("mybatch")
+        yield self.bi_cache.batch_start("yourbatch")
         msg = self.msg_helper.make_inbound("apples")
         yield self.store.add_inbound_message(
             msg, batch_ids=["mybatch", "yourbatch"])
@@ -229,6 +270,10 @@ class TestRiakOnlyOperationalMessageStore(VumiTestCase):
         self.assertEqual(stored_msg.msg, msg)
         self.assertEqual(
             sorted(stored_msg.batches.keys()), ["mybatch", "yourbatch"])
+        mykeys = yield self.bi_cache.list_inbound_message_keys("mybatch")
+        self.assertEqual(mykeys, [msg["message_id"]])
+        yourkeys = yield self.bi_cache.list_inbound_message_keys("yourbatch")
+        self.assertEqual(yourkeys, [msg["message_id"]])
 
         # Make sure we're writing the right indexes.
         self.assertEqual(stored_msg._riak_object.get_indexes(), set([
@@ -250,6 +295,8 @@ class TestRiakOnlyOperationalMessageStore(VumiTestCase):
         When an existing inbound message is added with a new batch identifier,
         it belongs to the new batch as well as batches it already belonged to.
         """
+        yield self.bi_cache.batch_start("mybatch")
+        yield self.bi_cache.batch_start("yourbatch")
         msg = self.msg_helper.make_inbound("apples")
         yield self.store.add_inbound_message(msg, batch_ids=["mybatch"])
         yield self.store.add_inbound_message(msg, batch_ids=["yourbatch"])
@@ -258,6 +305,10 @@ class TestRiakOnlyOperationalMessageStore(VumiTestCase):
         self.assertEqual(stored_msg.msg, msg)
         self.assertEqual(
             sorted(stored_msg.batches.keys()), ["mybatch", "yourbatch"])
+        mykeys = yield self.bi_cache.list_inbound_message_keys("mybatch")
+        self.assertEqual(mykeys, [msg["message_id"]])
+        yourkeys = yield self.bi_cache.list_inbound_message_keys("yourbatch")
+        self.assertEqual(yourkeys, [msg["message_id"]])
 
         # Make sure we're writing the right indexes.
         self.assertEqual(stored_msg._riak_object.get_indexes(), set([
@@ -331,14 +382,18 @@ class TestRiakOnlyOperationalMessageStore(VumiTestCase):
     def test_add_outbound_message_with_batch_id(self):
         """
         When an outbound message is added with a batch identifier, that batch
-        identifier is stored with it and indexed.
+        identifier is stored with it and indexed. Additionally, it is added to
+        the batch info cache.
         """
+        yield self.bi_cache.batch_start("mybatch")
         msg = self.msg_helper.make_outbound("apples")
         yield self.store.add_outbound_message(msg, batch_ids=["mybatch"])
         stored_msg = yield self.backend.get_raw_outbound_message(
             msg["message_id"])
         self.assertEqual(stored_msg.msg, msg)
         self.assertEqual(stored_msg.batches.keys(), ["mybatch"])
+        batch_keys = yield self.bi_cache.list_outbound_message_keys("mybatch")
+        self.assertEqual(batch_keys, [msg["message_id"]])
 
         # Make sure we're writing the right indexes.
         self.assertEqual(stored_msg._riak_object.get_indexes(), set([
@@ -353,8 +408,11 @@ class TestRiakOnlyOperationalMessageStore(VumiTestCase):
     def test_add_outbound_message_with_multiple_batch_ids(self):
         """
         When an outbound message is added with multiple batch identifiers, it
-        belongs to all the specified batches.
+        belongs to all the specified batches and is added to all their info
+        caches.
         """
+        yield self.bi_cache.batch_start("mybatch")
+        yield self.bi_cache.batch_start("yourbatch")
         msg = self.msg_helper.make_outbound("apples")
         yield self.store.add_outbound_message(
             msg, batch_ids=["mybatch", "yourbatch"])
@@ -363,6 +421,10 @@ class TestRiakOnlyOperationalMessageStore(VumiTestCase):
         self.assertEqual(stored_msg.msg, msg)
         self.assertEqual(
             sorted(stored_msg.batches.keys()), ["mybatch", "yourbatch"])
+        mykeys = yield self.bi_cache.list_outbound_message_keys("mybatch")
+        self.assertEqual(mykeys, [msg["message_id"]])
+        yourkeys = yield self.bi_cache.list_outbound_message_keys("yourbatch")
+        self.assertEqual(yourkeys, [msg["message_id"]])
 
         # Make sure we're writing the right indexes.
         self.assertEqual(stored_msg._riak_object.get_indexes(), set([
@@ -384,6 +446,8 @@ class TestRiakOnlyOperationalMessageStore(VumiTestCase):
         When an existing outbound message is added with a new batch identifier,
         it belongs to the new batch as well as batches it already belonged to.
         """
+        yield self.bi_cache.batch_start("mybatch")
+        yield self.bi_cache.batch_start("yourbatch")
         msg = self.msg_helper.make_outbound("apples")
         yield self.store.add_outbound_message(msg, batch_ids=["mybatch"])
         yield self.store.add_outbound_message(msg, batch_ids=["yourbatch"])
@@ -392,6 +456,10 @@ class TestRiakOnlyOperationalMessageStore(VumiTestCase):
         self.assertEqual(stored_msg.msg, msg)
         self.assertEqual(
             sorted(stored_msg.batches.keys()), ["mybatch", "yourbatch"])
+        mykeys = yield self.bi_cache.list_outbound_message_keys("mybatch")
+        self.assertEqual(mykeys, [msg["message_id"]])
+        yourkeys = yield self.bi_cache.list_outbound_message_keys("yourbatch")
+        self.assertEqual(yourkeys, [msg["message_id"]])
 
         # Make sure we're writing the right indexes.
         self.assertEqual(stored_msg._riak_object.get_indexes(), set([
@@ -433,6 +501,7 @@ class TestRiakOnlyOperationalMessageStore(VumiTestCase):
         When an event is added, it is stored in Riak.
         """
         msg = self.msg_helper.make_outbound("apples")
+        yield self.backend.add_outbound_message(msg)
         ack = self.msg_helper.make_ack(msg)
         stored_event = yield self.backend.get_raw_event(ack["event_id"])
         self.assertEqual(stored_event, None)
@@ -447,6 +516,71 @@ class TestRiakOnlyOperationalMessageStore(VumiTestCase):
             ("message_with_status_bin",
              "%s$%s$%s" % (ack["user_message_id"], ack["timestamp"], "ack")),
         ]))
+
+    @inlineCallbacks
+    def test_add_ack_event_no_stored_outbound(self):
+        """
+        When an event is added, it is stored in Riak even if there is no
+        outbound message to link it to.
+        """
+        msg = self.msg_helper.make_outbound("apples")
+        ack = self.msg_helper.make_ack(msg)
+        stored_event = yield self.backend.get_raw_event(ack["event_id"])
+        self.assertEqual(stored_event, None)
+
+        yield self.store.add_event(ack)
+        stored_event = yield self.backend.get_raw_event(ack["event_id"])
+        self.assertEqual(stored_event.event, ack)
+
+        # Make sure we're writing the right indexes.
+        self.assertEqual(stored_event._riak_object.get_indexes(), set([
+            ("message_bin", ack["user_message_id"]),
+            ("message_with_status_bin",
+             "%s$%s$%s" % (ack["user_message_id"], ack["timestamp"], "ack")),
+        ]))
+
+    @inlineCallbacks
+    def test_add_ack_event_with_outbound_in_batch(self):
+        """
+        When an event related to an outbound message in a batch is added, it is
+        stored in Riak and is added to the info cache for that batch.
+        """
+        yield self.bi_cache.batch_start("mybatch")
+        msg = self.msg_helper.make_outbound("apples")
+        yield self.backend.add_outbound_message(msg, batch_ids=["mybatch"])
+        ack = self.msg_helper.make_ack(msg)
+        stored_event = yield self.backend.get_raw_event(ack["event_id"])
+        self.assertEqual(stored_event, None)
+
+        yield self.store.add_event(ack)
+        stored_event = yield self.backend.get_raw_event(ack["event_id"])
+        self.assertEqual(stored_event.event, ack)
+        batch_keys = yield self.bi_cache.list_event_keys("mybatch")
+        self.assertEqual(batch_keys, [ack["event_id"]])
+
+    @inlineCallbacks
+    def test_add_ack_event_with_outbound_in_multiple_batches(self):
+        """
+        When an event related to an outbound message in multiple batches is
+        added, it is stored in Riak and is added to the info cache for each
+        batch.
+        """
+        yield self.bi_cache.batch_start("mybatch")
+        yield self.bi_cache.batch_start("yourbatch")
+        msg = self.msg_helper.make_outbound("apples")
+        yield self.backend.add_outbound_message(
+            msg, batch_ids=["mybatch", "yourbatch"])
+        ack = self.msg_helper.make_ack(msg)
+        stored_event = yield self.backend.get_raw_event(ack["event_id"])
+        self.assertEqual(stored_event, None)
+
+        yield self.store.add_event(ack)
+        stored_event = yield self.backend.get_raw_event(ack["event_id"])
+        self.assertEqual(stored_event.event, ack)
+        mykeys = yield self.bi_cache.list_event_keys("mybatch")
+        self.assertEqual(mykeys, [ack["event_id"]])
+        yourkeys = yield self.bi_cache.list_event_keys("yourbatch")
+        self.assertEqual(yourkeys, [ack["event_id"]])
 
     @inlineCallbacks
     def test_add_delivery_report_event(self):
@@ -508,19 +642,22 @@ class TestRiakOnlyOperationalMessageStore(VumiTestCase):
         self.assertEqual(stored_record, None)
 
 
-class TestRiakOnlyQueryMessageStore(VumiTestCase):
+class TestQueryMessageStore(VumiTestCase):
 
+    @inlineCallbacks
     def setUp(self):
         self.persistence_helper = self.add_helper(
             PersistenceHelper(use_riak=True))
         self.manager = self.persistence_helper.get_riak_manager()
-        self.store = RiakOnlyQueryMessageStore(self.manager)
+        self.redis = yield self.persistence_helper.get_redis_manager()
+        self.store = QueryMessageStore(self.manager, self.redis)
         self.backend = self.store.riak_backend
+        self.bi_cache = self.store.batch_info_cache
         self.msg_helper = self.add_helper(MessageHelper())
 
     def test_implements_IQueryMessageStore(self):
         """
-        RiakOnlyQueryMessageStore implements the IQueryMessageStore interface.
+        QueryMessageStore implements the IQueryMessageStore interface.
         """
         self.assertTrue(IQueryMessageStore.providedBy(self.store))
         self.assertTrue(verifyObject(IQueryMessageStore, self.store))
@@ -658,3 +795,610 @@ class TestRiakOnlyQueryMessageStore(VumiTestCase):
 
         keys_p2 = yield keys_p1.next_page()
         self.assertEqual(sorted(keys_p2), all_keys[3:])
+
+    @inlineCallbacks
+    def test_list_batch_inbound_keys_with_timestamps(self):
+        """
+        When we ask for a list of inbound message keys with timestamps, we get
+        an IndexPageWrapper containing the first page of results and can ask
+        for following pages until all results are delivered.
+        """
+        batch_id = yield self.backend.batch_start()
+        all_keys = []
+        start = datetime.utcnow() - timedelta(seconds=10)
+        for i in xrange(5):
+            timestamp = start + timedelta(seconds=i)
+            msg = self.msg_helper.make_inbound(
+                "Message %s" % (i,), timestamp=timestamp)
+            yield self.backend.add_inbound_message(msg, batch_ids=[batch_id])
+            all_keys.append((msg["message_id"], vumi_date(timestamp)))
+
+        keys_p1 = yield self.store.list_batch_inbound_keys_with_timestamps(
+            batch_id, max_results=3)
+        # Paginated results are sorted by timestamp.
+        self.assertEqual(list(keys_p1), all_keys[:3])
+
+        keys_p2 = yield keys_p1.next_page()
+        self.assertEqual(list(keys_p2), all_keys[3:])
+
+    @inlineCallbacks
+    def test_list_batch_inbound_keys_with_timestamps_range_start(self):
+        """
+        When we ask for a list of inbound message keys with timestamps, we can
+        specify a start timestamp.
+        """
+        batch_id = yield self.backend.batch_start()
+        all_keys = []
+        start = datetime.utcnow() - timedelta(seconds=10)
+        for i in xrange(5):
+            timestamp = start + timedelta(seconds=i)
+            msg = self.msg_helper.make_inbound(
+                "Message %s" % (i,), timestamp=timestamp)
+            yield self.backend.add_inbound_message(msg, batch_ids=[batch_id])
+            all_keys.append((msg["message_id"], vumi_date(timestamp)))
+
+        keys_p1 = yield self.store.list_batch_inbound_keys_with_timestamps(
+            batch_id, start=all_keys[1][1], max_results=3)
+        # Paginated results are sorted by timestamp.
+        self.assertEqual(list(keys_p1), all_keys[1:4])
+
+        keys_p2 = yield keys_p1.next_page()
+        self.assertEqual(list(keys_p2), all_keys[4:])
+
+    @inlineCallbacks
+    def test_list_batch_inbound_keys_with_timestamps_range_end(self):
+        """
+        When we ask for a list of inbound message keys with timestamps, we can
+        specify an end timestamp.
+        """
+        batch_id = yield self.backend.batch_start()
+        all_keys = []
+        start = datetime.utcnow() - timedelta(seconds=10)
+        for i in xrange(5):
+            timestamp = start + timedelta(seconds=i)
+            msg = self.msg_helper.make_inbound(
+                "Message %s" % (i,), timestamp=timestamp)
+            yield self.backend.add_inbound_message(msg, batch_ids=[batch_id])
+            all_keys.append((msg["message_id"], vumi_date(timestamp)))
+
+        keys_p1 = yield self.store.list_batch_inbound_keys_with_timestamps(
+            batch_id, end=all_keys[-2][1], max_results=3)
+        # Paginated results are sorted by timestamp.
+        self.assertEqual(list(keys_p1), all_keys[0:3])
+
+        keys_p2 = yield keys_p1.next_page()
+        self.assertEqual(list(keys_p2), all_keys[3:-1])
+
+    @inlineCallbacks
+    def test_list_batch_inbound_keys_with_timestamps_range(self):
+        """
+        When we ask for a list of inbound message keys with timestamps, we can
+        specify both ends of the range.
+        """
+        batch_id = yield self.backend.batch_start()
+        all_keys = []
+        start = datetime.utcnow() - timedelta(seconds=10)
+        for i in xrange(5):
+            timestamp = start + timedelta(seconds=i)
+            msg = self.msg_helper.make_inbound(
+                "Message %s" % (i,), timestamp=timestamp)
+            yield self.backend.add_inbound_message(msg, batch_ids=[batch_id])
+            all_keys.append((msg["message_id"], vumi_date(timestamp)))
+
+        keys_p1 = yield self.store.list_batch_inbound_keys_with_timestamps(
+            batch_id, start=all_keys[1][1], end=all_keys[-2][1], max_results=2)
+        # Paginated results are sorted by timestamp.
+        self.assertEqual(list(keys_p1), all_keys[1:3])
+
+        keys_p2 = yield keys_p1.next_page()
+        self.assertEqual(list(keys_p2), all_keys[3:-1])
+
+    @inlineCallbacks
+    def test_list_batch_inbound_keys_with_timestamps_empty(self):
+        """
+        When we ask for a list of inbound message keys with timestamps for an
+        empty batch, we get an empty IndexPageWrapper.
+        """
+        batch_id = yield self.backend.batch_start()
+        keys_page = yield self.store.list_batch_inbound_keys_with_timestamps(
+            batch_id)
+        self.assertEqual(list(keys_page), [])
+
+    @inlineCallbacks
+    def test_list_batch_outbound_keys_with_timestamps(self):
+        """
+        When we ask for a list of outbound message keys with timestamps, we get
+        an IndexPageWrapper containing the first page of results and can ask
+        for following pages until all results are delivered.
+        """
+        batch_id = yield self.backend.batch_start()
+        all_keys = []
+        start = datetime.utcnow() - timedelta(seconds=10)
+        for i in xrange(5):
+            timestamp = start + timedelta(seconds=i)
+            msg = self.msg_helper.make_outbound(
+                "Message %s" % (i,), timestamp=timestamp)
+            yield self.backend.add_outbound_message(msg, batch_ids=[batch_id])
+            all_keys.append((msg["message_id"], vumi_date(timestamp)))
+
+        keys_p1 = yield self.store.list_batch_outbound_keys_with_timestamps(
+            batch_id, max_results=3)
+        # Paginated results are sorted by timestamp.
+        self.assertEqual(list(keys_p1), all_keys[:3])
+
+        keys_p2 = yield keys_p1.next_page()
+        self.assertEqual(list(keys_p2), all_keys[3:])
+
+    @inlineCallbacks
+    def test_list_batch_outbound_keys_with_timestamps_range_start(self):
+        """
+        When we ask for a list of outbound message keys with timestamps, we can
+        specify a start timestamp.
+        """
+        batch_id = yield self.backend.batch_start()
+        all_keys = []
+        start = datetime.utcnow() - timedelta(seconds=10)
+        for i in xrange(5):
+            timestamp = start + timedelta(seconds=i)
+            msg = self.msg_helper.make_outbound(
+                "Message %s" % (i,), timestamp=timestamp)
+            yield self.backend.add_outbound_message(msg, batch_ids=[batch_id])
+            all_keys.append((msg["message_id"], vumi_date(timestamp)))
+
+        keys_p1 = yield self.store.list_batch_outbound_keys_with_timestamps(
+            batch_id, start=all_keys[1][1], max_results=3)
+        # Paginated results are sorted by timestamp.
+        self.assertEqual(list(keys_p1), all_keys[1:4])
+
+        keys_p2 = yield keys_p1.next_page()
+        self.assertEqual(list(keys_p2), all_keys[4:])
+
+    @inlineCallbacks
+    def test_list_batch_outbound_keys_with_timestamps_range_end(self):
+        """
+        When we ask for a list of outbound message keys with timestamps, we can
+        specify an end timestamp.
+        """
+        batch_id = yield self.backend.batch_start()
+        all_keys = []
+        start = datetime.utcnow() - timedelta(seconds=10)
+        for i in xrange(5):
+            timestamp = start + timedelta(seconds=i)
+            msg = self.msg_helper.make_outbound(
+                "Message %s" % (i,), timestamp=timestamp)
+            yield self.backend.add_outbound_message(msg, batch_ids=[batch_id])
+            all_keys.append((msg["message_id"], vumi_date(timestamp)))
+
+        keys_p1 = yield self.store.list_batch_outbound_keys_with_timestamps(
+            batch_id, end=all_keys[-2][1], max_results=3)
+        # Paginated results are sorted by timestamp.
+        self.assertEqual(list(keys_p1), all_keys[0:3])
+
+        keys_p2 = yield keys_p1.next_page()
+        self.assertEqual(list(keys_p2), all_keys[3:-1])
+
+    @inlineCallbacks
+    def test_list_batch_outbound_keys_with_timestamps_range(self):
+        """
+        When we ask for a list of outbound message keys with timestamps, we can
+        specify both ends of the range.
+        """
+        batch_id = yield self.backend.batch_start()
+        all_keys = []
+        start = datetime.utcnow() - timedelta(seconds=10)
+        for i in xrange(5):
+            timestamp = start + timedelta(seconds=i)
+            msg = self.msg_helper.make_outbound(
+                "Message %s" % (i,), timestamp=timestamp)
+            yield self.backend.add_outbound_message(msg, batch_ids=[batch_id])
+            all_keys.append((msg["message_id"], vumi_date(timestamp)))
+
+        keys_p1 = yield self.store.list_batch_outbound_keys_with_timestamps(
+            batch_id, start=all_keys[1][1], end=all_keys[-2][1], max_results=2)
+        # Paginated results are sorted by timestamp.
+        self.assertEqual(list(keys_p1), all_keys[1:3])
+
+        keys_p2 = yield keys_p1.next_page()
+        self.assertEqual(list(keys_p2), all_keys[3:-1])
+
+    @inlineCallbacks
+    def test_list_batch_outbound_keys_with_timestamps_empty(self):
+        """
+        When we ask for a list of outbound message keys with timestamps for an
+        empty batch, we get an empty IndexPageWrapper.
+        """
+        batch_id = yield self.backend.batch_start()
+        page = yield self.store.list_batch_outbound_keys_with_timestamps(
+            batch_id)
+        self.assertEqual(list(page), [])
+
+    @inlineCallbacks
+    def test_list_batch_inbound_keys_with_addresses(self):
+        """
+        When we ask for a list of inbound message keys with addresses, we get
+        an IndexPageWrapper containing the first page of results and can ask
+        for following pages until all results are delivered.
+        """
+        batch_id = yield self.backend.batch_start()
+        all_keys = []
+        start = datetime.utcnow() - timedelta(seconds=10)
+        for i in xrange(5):
+            timestamp = start + timedelta(seconds=i)
+            addr = "addr%s" % (i,)
+            msg = self.msg_helper.make_inbound(
+                "Message %s" % (i,), timestamp=timestamp, from_addr=addr)
+            yield self.backend.add_inbound_message(msg, batch_ids=[batch_id])
+            all_keys.append(
+                (msg["message_id"], vumi_date(timestamp), addr))
+
+        keys_p1 = yield self.store.list_batch_inbound_keys_with_addresses(
+            batch_id, max_results=3)
+        # Paginated results are sorted by timestamp.
+        self.assertEqual(list(keys_p1), all_keys[:3])
+
+        keys_p2 = yield keys_p1.next_page()
+        self.assertEqual(list(keys_p2), all_keys[3:])
+
+    @inlineCallbacks
+    def test_list_batch_inbound_keys_with_addresses_range_start(self):
+        """
+        When we ask for a list of inbound message keys with addresses, we can
+        specify a start timestamp.
+        """
+        batch_id = yield self.backend.batch_start()
+        all_keys = []
+        start = datetime.utcnow() - timedelta(seconds=10)
+        for i in xrange(5):
+            timestamp = start + timedelta(seconds=i)
+            addr = "addr%s" % (i,)
+            msg = self.msg_helper.make_inbound(
+                "Message %s" % (i,), timestamp=timestamp, from_addr=addr)
+            yield self.backend.add_inbound_message(msg, batch_ids=[batch_id])
+            all_keys.append(
+                (msg["message_id"], vumi_date(timestamp), addr))
+
+        keys_p1 = yield self.store.list_batch_inbound_keys_with_addresses(
+            batch_id, start=all_keys[1][1], max_results=3)
+        # Paginated results are sorted by timestamp.
+        self.assertEqual(list(keys_p1), all_keys[1:4])
+
+        keys_p2 = yield keys_p1.next_page()
+        self.assertEqual(list(keys_p2), all_keys[4:])
+
+    @inlineCallbacks
+    def test_list_batch_inbound_keys_with_addresses_range_end(self):
+        """
+        When we ask for a list of inbound message keys with addresses, we can
+        specify an end timestamp.
+        """
+        batch_id = yield self.backend.batch_start()
+        all_keys = []
+        start = datetime.utcnow() - timedelta(seconds=10)
+        for i in xrange(5):
+            timestamp = start + timedelta(seconds=i)
+            addr = "addr%s" % (i,)
+            msg = self.msg_helper.make_inbound(
+                "Message %s" % (i,), timestamp=timestamp, from_addr=addr)
+            yield self.backend.add_inbound_message(msg, batch_ids=[batch_id])
+            all_keys.append(
+                (msg["message_id"], vumi_date(timestamp), addr))
+
+        keys_p1 = yield self.store.list_batch_inbound_keys_with_addresses(
+            batch_id, end=all_keys[-2][1], max_results=3)
+        # Paginated results are sorted by timestamp.
+        self.assertEqual(list(keys_p1), all_keys[0:3])
+
+        keys_p2 = yield keys_p1.next_page()
+        self.assertEqual(list(keys_p2), all_keys[3:-1])
+
+    @inlineCallbacks
+    def test_list_batch_inbound_keys_with_addresses_range(self):
+        """
+        When we ask for a list of inbound message keys with addresses, we can
+        specify both ends of the range.
+        """
+        batch_id = yield self.backend.batch_start()
+        all_keys = []
+        start = datetime.utcnow() - timedelta(seconds=10)
+        for i in xrange(5):
+            timestamp = start + timedelta(seconds=i)
+            addr = "addr%s" % (i,)
+            msg = self.msg_helper.make_inbound(
+                "Message %s" % (i,), timestamp=timestamp, from_addr=addr)
+            yield self.backend.add_inbound_message(msg, batch_ids=[batch_id])
+            all_keys.append(
+                (msg["message_id"], vumi_date(timestamp), addr))
+
+        keys_p1 = yield self.store.list_batch_inbound_keys_with_addresses(
+            batch_id, start=all_keys[1][1], end=all_keys[-2][1], max_results=2)
+        # Paginated results are sorted by timestamp.
+        self.assertEqual(list(keys_p1), all_keys[1:3])
+
+        keys_p2 = yield keys_p1.next_page()
+        self.assertEqual(list(keys_p2), all_keys[3:-1])
+
+    @inlineCallbacks
+    def test_list_batch_inbound_keys_with_addresses_empty(self):
+        """
+        When we ask for a list of inbound message keys with addresses for an
+        empty batch, we get an empty IndexPageWrapper.
+        """
+        batch_id = yield self.backend.batch_start()
+        keys_page = yield self.store.list_batch_inbound_keys_with_addresses(
+            batch_id)
+        self.assertEqual(list(keys_page), [])
+
+    @inlineCallbacks
+    def test_list_batch_outbound_keys_with_addresses(self):
+        """
+        When we ask for a list of outbound message keys with addresses, we get
+        an IndexPageWrapper containing the first page of results and can ask
+        for following pages until all results are delivered.
+        """
+        batch_id = yield self.backend.batch_start()
+        all_keys = []
+        start = datetime.utcnow() - timedelta(seconds=10)
+        for i in xrange(5):
+            timestamp = start + timedelta(seconds=i)
+            addr = "addr%s" % (i,)
+            msg = self.msg_helper.make_outbound(
+                "Message %s" % (i,), timestamp=timestamp, to_addr=addr)
+            yield self.backend.add_outbound_message(msg, batch_ids=[batch_id])
+            all_keys.append(
+                (msg["message_id"], vumi_date(timestamp), addr))
+
+        keys_p1 = yield self.store.list_batch_outbound_keys_with_addresses(
+            batch_id, max_results=3)
+        # Paginated results are sorted by timestamp.
+        self.assertEqual(list(keys_p1), all_keys[:3])
+
+        keys_p2 = yield keys_p1.next_page()
+        self.assertEqual(list(keys_p2), all_keys[3:])
+
+    @inlineCallbacks
+    def test_list_batch_outbound_keys_with_addresses_range_start(self):
+        """
+        When we ask for a list of outbound message keys with addresses, we can
+        specify a start timestamp.
+        """
+        batch_id = yield self.backend.batch_start()
+        all_keys = []
+        start = datetime.utcnow() - timedelta(seconds=10)
+        for i in xrange(5):
+            timestamp = start + timedelta(seconds=i)
+            addr = "addr%s" % (i,)
+            msg = self.msg_helper.make_outbound(
+                "Message %s" % (i,), timestamp=timestamp, to_addr=addr)
+            yield self.backend.add_outbound_message(msg, batch_ids=[batch_id])
+            all_keys.append(
+                (msg["message_id"], vumi_date(timestamp), addr))
+
+        keys_p1 = yield self.store.list_batch_outbound_keys_with_addresses(
+            batch_id, start=all_keys[1][1], max_results=3)
+        # Paginated results are sorted by timestamp.
+        self.assertEqual(list(keys_p1), all_keys[1:4])
+
+        keys_p2 = yield keys_p1.next_page()
+        self.assertEqual(list(keys_p2), all_keys[4:])
+
+    @inlineCallbacks
+    def test_list_batch_outbound_keys_with_addresses_range_end(self):
+        """
+        When we ask for a list of outbound message keys with addresses, we can
+        specify an end timestamp.
+        """
+        batch_id = yield self.backend.batch_start()
+        all_keys = []
+        start = datetime.utcnow() - timedelta(seconds=10)
+        for i in xrange(5):
+            timestamp = start + timedelta(seconds=i)
+            addr = "addr%s" % (i,)
+            msg = self.msg_helper.make_outbound(
+                "Message %s" % (i,), timestamp=timestamp, to_addr=addr)
+            yield self.backend.add_outbound_message(msg, batch_ids=[batch_id])
+            all_keys.append(
+                (msg["message_id"], vumi_date(timestamp), addr))
+
+        keys_p1 = yield self.store.list_batch_outbound_keys_with_addresses(
+            batch_id, end=all_keys[-2][1], max_results=3)
+        # Paginated results are sorted by timestamp.
+        self.assertEqual(list(keys_p1), all_keys[0:3])
+
+        keys_p2 = yield keys_p1.next_page()
+        self.assertEqual(list(keys_p2), all_keys[3:-1])
+
+    @inlineCallbacks
+    def test_list_batch_outbound_keys_with_addresses_range(self):
+        """
+        When we ask for a list of outbound message keys with addresses, we can
+        specify both ends of the range.
+        """
+        batch_id = yield self.backend.batch_start()
+        all_keys = []
+        start = datetime.utcnow() - timedelta(seconds=10)
+        for i in xrange(5):
+            timestamp = start + timedelta(seconds=i)
+            addr = "addr%s" % (i,)
+            msg = self.msg_helper.make_outbound(
+                "Message %s" % (i,), timestamp=timestamp, to_addr=addr)
+            yield self.backend.add_outbound_message(msg, batch_ids=[batch_id])
+            all_keys.append(
+                (msg["message_id"], vumi_date(timestamp), addr))
+
+        keys_p1 = yield self.store.list_batch_outbound_keys_with_addresses(
+            batch_id, start=all_keys[1][1], end=all_keys[-2][1], max_results=2)
+        # Paginated results are sorted by timestamp.
+        self.assertEqual(list(keys_p1), all_keys[1:3])
+
+        keys_p2 = yield keys_p1.next_page()
+        self.assertEqual(list(keys_p2), all_keys[3:-1])
+
+    @inlineCallbacks
+    def test_list_batch_outbound_keys_with_addresses_empty(self):
+        """
+        When we ask for a list of outbound message keys with addresses for an
+        empty batch, we get an empty IndexPageWrapper.
+        """
+        batch_id = yield self.backend.batch_start()
+        keys_page = yield self.store.list_batch_outbound_keys_with_addresses(
+            batch_id)
+        self.assertEqual(list(keys_page), [])
+
+    @inlineCallbacks
+    def test_get_batch_info_status(self):
+        """
+        The batch status can be retrieved as a dict of ints.
+        """
+        yield self.bi_cache.batch_start("mybatch")
+        yield self.bi_cache.add_inbound_message_count("mybatch", 4)
+        yield self.bi_cache.add_outbound_message_count("mybatch", 3)
+        yield self.bi_cache.add_event_count("mybatch", "ack", 2)
+        yield self.bi_cache.add_event_count(
+            "mybatch", "delivery_report.delivered", 1)
+
+        batch_status = yield self.store.get_batch_info_status("mybatch")
+        self.assertEqual(batch_status, {
+            "sent": 3,
+            "ack": 2,
+            "nack": 0,
+            "delivery_report": 1,
+            "delivery_report.delivered": 1,
+            "delivery_report.failed": 0,
+            "delivery_report.pending": 0,
+        })
+
+    @inlineCallbacks
+    def test_get_batch_info_status_no_batch(self):
+        """
+        The batch status is empty for a batch that doesn't exist.
+        """
+        batch_status = yield self.store.get_batch_info_status("mybatch")
+        self.assertEqual(batch_status, {})
+
+    @inlineCallbacks
+    def test_list_batch_recent_inbound_keys(self):
+        """
+        The list of recent inbound message keys can be retrieved with or
+        without timestamps, ordered from newest to oldest.
+        """
+        yield self.bi_cache.batch_start("batch")
+        start = to_timestamp(datetime.utcnow()) - 10
+        msgs = [("message%d" % i, start + i) for i in range(5)]
+        for msg in msgs:
+            yield self.bi_cache.add_inbound_message_key("batch", *msg)
+
+        keys = yield self.store.list_batch_recent_inbound_keys("batch")
+        self.assertEqual(keys, [k for k, _ in reversed(msgs)])
+        tkeys = yield self.store.list_batch_recent_inbound_keys(
+            "batch", with_timestamp=True)
+        self.assertEqual(tkeys, list(reversed(msgs)))
+
+    @inlineCallbacks
+    def test_list_batch_recent_inbound_keys_empty_batch(self):
+        """
+        The list of recent inbound message keys is empty when there are no
+        messages in the batch.
+        """
+        yield self.bi_cache.batch_start("batch")
+
+        keys = yield self.store.list_batch_recent_inbound_keys("batch")
+        self.assertEqual(keys, [])
+        tkeys = yield self.store.list_batch_recent_inbound_keys(
+            "batch", with_timestamp=True)
+        self.assertEqual(tkeys, [])
+
+    @inlineCallbacks
+    def test_list_batch_recent_outbound_keys(self):
+        """
+        The list of recent outbound message keys can be retrieved with or
+        without timestamps, ordered from newest to oldest.
+        """
+        yield self.bi_cache.batch_start("batch")
+        start = to_timestamp(datetime.utcnow()) - 10
+        msgs = [("message%d" % i, start + i) for i in range(5)]
+        for msg in msgs:
+            yield self.bi_cache.add_outbound_message_key("batch", *msg)
+
+        keys = yield self.store.list_batch_recent_outbound_keys("batch")
+        self.assertEqual(keys, [k for k, _ in reversed(msgs)])
+        tkeys = yield self.store.list_batch_recent_outbound_keys(
+            "batch", with_timestamp=True)
+        self.assertEqual(tkeys, list(reversed(msgs)))
+
+    @inlineCallbacks
+    def test_list_batch_recent_outbound_keys_empty_batch(self):
+        """
+        The list of recent outbound message keys is empty when there are no
+        messages in the batch.
+        """
+        yield self.bi_cache.batch_start("batch")
+
+        keys = yield self.store.list_batch_recent_outbound_keys("batch")
+        self.assertEqual(keys, [])
+        tkeys = yield self.store.list_batch_recent_outbound_keys(
+            "batch", with_timestamp=True)
+        self.assertEqual(tkeys, [])
+
+    @inlineCallbacks
+    def test_get_batch_inbound_count(self):
+        """
+        The inbound message count can be queried.
+        """
+        yield self.bi_cache.batch_start("batch")
+        yield self.bi_cache.add_inbound_message_count("batch", 5000)
+        yield self.bi_cache.add_inbound_message_key(
+            "batch", "foo", to_timestamp(datetime.utcnow()))
+
+        count = yield self.store.get_batch_inbound_count("batch")
+        self.assertEqual(count, 5001)
+
+    @inlineCallbacks
+    def test_get_batch_inbound_count_no_batch(self):
+        """
+        The inbound message count returns zero for missing batches.
+        """
+        count = yield self.store.get_batch_inbound_count("batch")
+        self.assertEqual(count, 0)
+
+    @inlineCallbacks
+    def test_get_batch_outbound_count(self):
+        """
+        The outbound message count can be queried.
+        """
+        yield self.bi_cache.batch_start("batch")
+        yield self.bi_cache.add_outbound_message_count("batch", 5000)
+        yield self.bi_cache.add_outbound_message_key(
+            "batch", "foo", to_timestamp(datetime.utcnow()))
+
+        count = yield self.store.get_batch_outbound_count("batch")
+        self.assertEqual(count, 5001)
+
+    @inlineCallbacks
+    def test_get_batch_outbound_count_no_batch(self):
+        """
+        The outbound message count returns zero for missing batches.
+        """
+        count = yield self.store.get_batch_outbound_count("batch")
+        self.assertEqual(count, 0)
+
+    @inlineCallbacks
+    def test_get_batch_event_count(self):
+        """
+        The event count can be queried.
+        """
+        yield self.bi_cache.batch_start("batch")
+        yield self.bi_cache.add_event_count("batch", "ack", 5000)
+        yield self.bi_cache.add_event_key(
+            "batch", "foo", "delivery_report.delivered",
+            to_timestamp(datetime.utcnow()))
+
+        count = yield self.store.get_batch_event_count("batch")
+        self.assertEqual(count, 5001)
+
+    @inlineCallbacks
+    def test_get_batch_event_count_no_batch(self):
+        """
+        The outbound message count returns zero for missing batches.
+        """
+        count = yield self.store.get_batch_event_count("batch")
+        self.assertEqual(count, 0)

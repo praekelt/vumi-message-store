@@ -4,12 +4,22 @@
 Tests for vumi_message_store.riak_backend.
 """
 
+from datetime import datetime, timedelta
+
 from twisted.internet.defer import inlineCallbacks
+from vumi.message import VUMI_DATE_FORMAT
 from vumi.tests.helpers import VumiTestCase, MessageHelper, PersistenceHelper
 
 from vumi_message_store.riak_backend import MessageStoreRiakBackend
 from vumi_message_store.models import (
     Batch, CurrentTag, InboundMessage, OutboundMessage, Event)
+
+
+def vumi_date(timestamp):
+    """
+    Turn a datetime object into a VUMI_DATE_FORMAT string.
+    """
+    return datetime.strftime(timestamp, VUMI_DATE_FORMAT)
 
 
 class TestMessageStoreRiakBackend(VumiTestCase):
@@ -685,4 +695,452 @@ class TestMessageStoreRiakBackend(VumiTestCase):
 
         keys_page = yield self.backend.list_message_event_keys(
             msg["message_id"])
+        self.assertEqual(list(keys_page), [])
+
+    @inlineCallbacks
+    def test_list_batch_inbound_keys_with_timestamps(self):
+        """
+        When we ask for a list of inbound message keys with timestamps, we get
+        an IndexPageWrapper containing the first page of results and can ask
+        for following pages until all results are delivered.
+        """
+        batch_id = yield self.backend.batch_start()
+        all_keys = []
+        start = datetime.utcnow() - timedelta(seconds=10)
+        for i in xrange(5):
+            timestamp = start + timedelta(seconds=i)
+            msg = self.msg_helper.make_inbound(
+                "Message %s" % (i,), timestamp=timestamp)
+            yield self.backend.add_inbound_message(msg, batch_ids=[batch_id])
+            all_keys.append((msg["message_id"], vumi_date(timestamp)))
+
+        keys_p1 = yield self.backend.list_batch_inbound_keys_with_timestamps(
+            batch_id, max_results=3)
+        # Paginated results are sorted by timestamp.
+        self.assertEqual(list(keys_p1), all_keys[:3])
+
+        keys_p2 = yield keys_p1.next_page()
+        self.assertEqual(list(keys_p2), all_keys[3:])
+
+    @inlineCallbacks
+    def test_list_batch_inbound_keys_with_timestamps_range_start(self):
+        """
+        When we ask for a list of inbound message keys with timestamps, we can
+        specify a start timestamp.
+        """
+        batch_id = yield self.backend.batch_start()
+        all_keys = []
+        start = datetime.utcnow() - timedelta(seconds=10)
+        for i in xrange(5):
+            timestamp = start + timedelta(seconds=i)
+            msg = self.msg_helper.make_inbound(
+                "Message %s" % (i,), timestamp=timestamp)
+            yield self.backend.add_inbound_message(msg, batch_ids=[batch_id])
+            all_keys.append((msg["message_id"], vumi_date(timestamp)))
+
+        keys_p1 = yield self.backend.list_batch_inbound_keys_with_timestamps(
+            batch_id, start=all_keys[1][1], max_results=3)
+        # Paginated results are sorted by timestamp.
+        self.assertEqual(list(keys_p1), all_keys[1:4])
+
+        keys_p2 = yield keys_p1.next_page()
+        self.assertEqual(list(keys_p2), all_keys[4:])
+
+    @inlineCallbacks
+    def test_list_batch_inbound_keys_with_timestamps_range_end(self):
+        """
+        When we ask for a list of inbound message keys with timestamps, we can
+        specify an end timestamp.
+        """
+        batch_id = yield self.backend.batch_start()
+        all_keys = []
+        start = datetime.utcnow() - timedelta(seconds=10)
+        for i in xrange(5):
+            timestamp = start + timedelta(seconds=i)
+            msg = self.msg_helper.make_inbound(
+                "Message %s" % (i,), timestamp=timestamp)
+            yield self.backend.add_inbound_message(msg, batch_ids=[batch_id])
+            all_keys.append((msg["message_id"], vumi_date(timestamp)))
+
+        keys_p1 = yield self.backend.list_batch_inbound_keys_with_timestamps(
+            batch_id, end=all_keys[-2][1], max_results=3)
+        # Paginated results are sorted by timestamp.
+        self.assertEqual(list(keys_p1), all_keys[0:3])
+
+        keys_p2 = yield keys_p1.next_page()
+        self.assertEqual(list(keys_p2), all_keys[3:-1])
+
+    @inlineCallbacks
+    def test_list_batch_inbound_keys_with_timestamps_range(self):
+        """
+        When we ask for a list of inbound message keys with timestamps, we can
+        specify both ends of the range.
+        """
+        batch_id = yield self.backend.batch_start()
+        all_keys = []
+        start = datetime.utcnow() - timedelta(seconds=10)
+        for i in xrange(5):
+            timestamp = start + timedelta(seconds=i)
+            msg = self.msg_helper.make_inbound(
+                "Message %s" % (i,), timestamp=timestamp)
+            yield self.backend.add_inbound_message(msg, batch_ids=[batch_id])
+            all_keys.append((msg["message_id"], vumi_date(timestamp)))
+
+        keys_p1 = yield self.backend.list_batch_inbound_keys_with_timestamps(
+            batch_id, start=all_keys[1][1], end=all_keys[-2][1], max_results=2)
+        # Paginated results are sorted by timestamp.
+        self.assertEqual(list(keys_p1), all_keys[1:3])
+
+        keys_p2 = yield keys_p1.next_page()
+        self.assertEqual(list(keys_p2), all_keys[3:-1])
+
+    @inlineCallbacks
+    def test_list_batch_inbound_keys_with_timestamps_empty(self):
+        """
+        When we ask for a list of inbound message keys with timestamps for an
+        empty batch, we get an empty IndexPageWrapper.
+        """
+        batch_id = yield self.backend.batch_start()
+        keys_page = yield self.backend.list_batch_inbound_keys_with_timestamps(
+            batch_id)
+        self.assertEqual(list(keys_page), [])
+
+    @inlineCallbacks
+    def test_list_batch_outbound_keys_with_timestamps(self):
+        """
+        When we ask for a list of outbound message keys with timestamps, we get
+        an IndexPageWrapper containing the first page of results and can ask
+        for following pages until all results are delivered.
+        """
+        batch_id = yield self.backend.batch_start()
+        all_keys = []
+        start = datetime.utcnow() - timedelta(seconds=10)
+        for i in xrange(5):
+            timestamp = start + timedelta(seconds=i)
+            msg = self.msg_helper.make_outbound(
+                "Message %s" % (i,), timestamp=timestamp)
+            yield self.backend.add_outbound_message(msg, batch_ids=[batch_id])
+            all_keys.append((msg["message_id"], vumi_date(timestamp)))
+
+        keys_p1 = yield self.backend.list_batch_outbound_keys_with_timestamps(
+            batch_id, max_results=3)
+        # Paginated results are sorted by timestamp.
+        self.assertEqual(list(keys_p1), all_keys[:3])
+
+        keys_p2 = yield keys_p1.next_page()
+        self.assertEqual(list(keys_p2), all_keys[3:])
+
+    @inlineCallbacks
+    def test_list_batch_outbound_keys_with_timestamps_range_start(self):
+        """
+        When we ask for a list of outbound message keys with timestamps, we can
+        specify a start timestamp.
+        """
+        batch_id = yield self.backend.batch_start()
+        all_keys = []
+        start = datetime.utcnow() - timedelta(seconds=10)
+        for i in xrange(5):
+            timestamp = start + timedelta(seconds=i)
+            msg = self.msg_helper.make_outbound(
+                "Message %s" % (i,), timestamp=timestamp)
+            yield self.backend.add_outbound_message(msg, batch_ids=[batch_id])
+            all_keys.append((msg["message_id"], vumi_date(timestamp)))
+
+        keys_p1 = yield self.backend.list_batch_outbound_keys_with_timestamps(
+            batch_id, start=all_keys[1][1], max_results=3)
+        # Paginated results are sorted by timestamp.
+        self.assertEqual(list(keys_p1), all_keys[1:4])
+
+        keys_p2 = yield keys_p1.next_page()
+        self.assertEqual(list(keys_p2), all_keys[4:])
+
+    @inlineCallbacks
+    def test_list_batch_outbound_keys_with_timestamps_range_end(self):
+        """
+        When we ask for a list of outbound message keys with timestamps, we can
+        specify an end timestamp.
+        """
+        batch_id = yield self.backend.batch_start()
+        all_keys = []
+        start = datetime.utcnow() - timedelta(seconds=10)
+        for i in xrange(5):
+            timestamp = start + timedelta(seconds=i)
+            msg = self.msg_helper.make_outbound(
+                "Message %s" % (i,), timestamp=timestamp)
+            yield self.backend.add_outbound_message(msg, batch_ids=[batch_id])
+            all_keys.append((msg["message_id"], vumi_date(timestamp)))
+
+        keys_p1 = yield self.backend.list_batch_outbound_keys_with_timestamps(
+            batch_id, end=all_keys[-2][1], max_results=3)
+        # Paginated results are sorted by timestamp.
+        self.assertEqual(list(keys_p1), all_keys[0:3])
+
+        keys_p2 = yield keys_p1.next_page()
+        self.assertEqual(list(keys_p2), all_keys[3:-1])
+
+    @inlineCallbacks
+    def test_list_batch_outbound_keys_with_timestamps_range(self):
+        """
+        When we ask for a list of outbound message keys with timestamps, we can
+        specify both ends of the range.
+        """
+        batch_id = yield self.backend.batch_start()
+        all_keys = []
+        start = datetime.utcnow() - timedelta(seconds=10)
+        for i in xrange(5):
+            timestamp = start + timedelta(seconds=i)
+            msg = self.msg_helper.make_outbound(
+                "Message %s" % (i,), timestamp=timestamp)
+            yield self.backend.add_outbound_message(msg, batch_ids=[batch_id])
+            all_keys.append((msg["message_id"], vumi_date(timestamp)))
+
+        keys_p1 = yield self.backend.list_batch_outbound_keys_with_timestamps(
+            batch_id, start=all_keys[1][1], end=all_keys[-2][1], max_results=2)
+        # Paginated results are sorted by timestamp.
+        self.assertEqual(list(keys_p1), all_keys[1:3])
+
+        keys_p2 = yield keys_p1.next_page()
+        self.assertEqual(list(keys_p2), all_keys[3:-1])
+
+    @inlineCallbacks
+    def test_list_batch_outbound_keys_with_timestamps_empty(self):
+        """
+        When we ask for a list of outbound message keys with timestamps for an
+        empty batch, we get an empty IndexPageWrapper.
+        """
+        batch_id = yield self.backend.batch_start()
+        page = yield self.backend.list_batch_outbound_keys_with_timestamps(
+            batch_id)
+        self.assertEqual(list(page), [])
+
+    @inlineCallbacks
+    def test_list_batch_inbound_keys_with_addresses(self):
+        """
+        When we ask for a list of inbound message keys with addresses, we get
+        an IndexPageWrapper containing the first page of results and can ask
+        for following pages until all results are delivered.
+        """
+        batch_id = yield self.backend.batch_start()
+        all_keys = []
+        start = datetime.utcnow() - timedelta(seconds=10)
+        for i in xrange(5):
+            timestamp = start + timedelta(seconds=i)
+            addr = "addr%s" % (i,)
+            msg = self.msg_helper.make_inbound(
+                "Message %s" % (i,), timestamp=timestamp, from_addr=addr)
+            yield self.backend.add_inbound_message(msg, batch_ids=[batch_id])
+            all_keys.append(
+                (msg["message_id"], vumi_date(timestamp), addr))
+
+        keys_p1 = yield self.backend.list_batch_inbound_keys_with_addresses(
+            batch_id, max_results=3)
+        # Paginated results are sorted by timestamp.
+        self.assertEqual(list(keys_p1), all_keys[:3])
+
+        keys_p2 = yield keys_p1.next_page()
+        self.assertEqual(list(keys_p2), all_keys[3:])
+
+    @inlineCallbacks
+    def test_list_batch_inbound_keys_with_addresses_range_start(self):
+        """
+        When we ask for a list of inbound message keys with addresses, we can
+        specify a start timestamp.
+        """
+        batch_id = yield self.backend.batch_start()
+        all_keys = []
+        start = datetime.utcnow() - timedelta(seconds=10)
+        for i in xrange(5):
+            timestamp = start + timedelta(seconds=i)
+            addr = "addr%s" % (i,)
+            msg = self.msg_helper.make_inbound(
+                "Message %s" % (i,), timestamp=timestamp, from_addr=addr)
+            yield self.backend.add_inbound_message(msg, batch_ids=[batch_id])
+            all_keys.append(
+                (msg["message_id"], vumi_date(timestamp), addr))
+
+        keys_p1 = yield self.backend.list_batch_inbound_keys_with_addresses(
+            batch_id, start=all_keys[1][1], max_results=3)
+        # Paginated results are sorted by timestamp.
+        self.assertEqual(list(keys_p1), all_keys[1:4])
+
+        keys_p2 = yield keys_p1.next_page()
+        self.assertEqual(list(keys_p2), all_keys[4:])
+
+    @inlineCallbacks
+    def test_list_batch_inbound_keys_with_addresses_range_end(self):
+        """
+        When we ask for a list of inbound message keys with addresses, we can
+        specify an end timestamp.
+        """
+        batch_id = yield self.backend.batch_start()
+        all_keys = []
+        start = datetime.utcnow() - timedelta(seconds=10)
+        for i in xrange(5):
+            timestamp = start + timedelta(seconds=i)
+            addr = "addr%s" % (i,)
+            msg = self.msg_helper.make_inbound(
+                "Message %s" % (i,), timestamp=timestamp, from_addr=addr)
+            yield self.backend.add_inbound_message(msg, batch_ids=[batch_id])
+            all_keys.append(
+                (msg["message_id"], vumi_date(timestamp), addr))
+
+        keys_p1 = yield self.backend.list_batch_inbound_keys_with_addresses(
+            batch_id, end=all_keys[-2][1], max_results=3)
+        # Paginated results are sorted by timestamp.
+        self.assertEqual(list(keys_p1), all_keys[0:3])
+
+        keys_p2 = yield keys_p1.next_page()
+        self.assertEqual(list(keys_p2), all_keys[3:-1])
+
+    @inlineCallbacks
+    def test_list_batch_inbound_keys_with_addresses_range(self):
+        """
+        When we ask for a list of inbound message keys with addresses, we can
+        specify both ends of the range.
+        """
+        batch_id = yield self.backend.batch_start()
+        all_keys = []
+        start = datetime.utcnow() - timedelta(seconds=10)
+        for i in xrange(5):
+            timestamp = start + timedelta(seconds=i)
+            addr = "addr%s" % (i,)
+            msg = self.msg_helper.make_inbound(
+                "Message %s" % (i,), timestamp=timestamp, from_addr=addr)
+            yield self.backend.add_inbound_message(msg, batch_ids=[batch_id])
+            all_keys.append(
+                (msg["message_id"], vumi_date(timestamp), addr))
+
+        keys_p1 = yield self.backend.list_batch_inbound_keys_with_addresses(
+            batch_id, start=all_keys[1][1], end=all_keys[-2][1], max_results=2)
+        # Paginated results are sorted by timestamp.
+        self.assertEqual(list(keys_p1), all_keys[1:3])
+
+        keys_p2 = yield keys_p1.next_page()
+        self.assertEqual(list(keys_p2), all_keys[3:-1])
+
+    @inlineCallbacks
+    def test_list_batch_inbound_keys_with_addresses_empty(self):
+        """
+        When we ask for a list of inbound message keys with addresses for an
+        empty batch, we get an empty IndexPageWrapper.
+        """
+        batch_id = yield self.backend.batch_start()
+        keys_page = yield self.backend.list_batch_inbound_keys_with_addresses(
+            batch_id)
+        self.assertEqual(list(keys_page), [])
+
+    @inlineCallbacks
+    def test_list_batch_outbound_keys_with_addresses(self):
+        """
+        When we ask for a list of outbound message keys with addresses, we get
+        an IndexPageWrapper containing the first page of results and can ask
+        for following pages until all results are delivered.
+        """
+        batch_id = yield self.backend.batch_start()
+        all_keys = []
+        start = datetime.utcnow() - timedelta(seconds=10)
+        for i in xrange(5):
+            timestamp = start + timedelta(seconds=i)
+            addr = "addr%s" % (i,)
+            msg = self.msg_helper.make_outbound(
+                "Message %s" % (i,), timestamp=timestamp, to_addr=addr)
+            yield self.backend.add_outbound_message(msg, batch_ids=[batch_id])
+            all_keys.append(
+                (msg["message_id"], vumi_date(timestamp), addr))
+
+        keys_p1 = yield self.backend.list_batch_outbound_keys_with_addresses(
+            batch_id, max_results=3)
+        # Paginated results are sorted by timestamp.
+        self.assertEqual(list(keys_p1), all_keys[:3])
+
+        keys_p2 = yield keys_p1.next_page()
+        self.assertEqual(list(keys_p2), all_keys[3:])
+
+    @inlineCallbacks
+    def test_list_batch_outbound_keys_with_addresses_range_start(self):
+        """
+        When we ask for a list of outbound message keys with addresses, we can
+        specify a start timestamp.
+        """
+        batch_id = yield self.backend.batch_start()
+        all_keys = []
+        start = datetime.utcnow() - timedelta(seconds=10)
+        for i in xrange(5):
+            timestamp = start + timedelta(seconds=i)
+            addr = "addr%s" % (i,)
+            msg = self.msg_helper.make_outbound(
+                "Message %s" % (i,), timestamp=timestamp, to_addr=addr)
+            yield self.backend.add_outbound_message(msg, batch_ids=[batch_id])
+            all_keys.append(
+                (msg["message_id"], vumi_date(timestamp), addr))
+
+        keys_p1 = yield self.backend.list_batch_outbound_keys_with_addresses(
+            batch_id, start=all_keys[1][1], max_results=3)
+        # Paginated results are sorted by timestamp.
+        self.assertEqual(list(keys_p1), all_keys[1:4])
+
+        keys_p2 = yield keys_p1.next_page()
+        self.assertEqual(list(keys_p2), all_keys[4:])
+
+    @inlineCallbacks
+    def test_list_batch_outbound_keys_with_addresses_range_end(self):
+        """
+        When we ask for a list of outbound message keys with addresses, we can
+        specify an end timestamp.
+        """
+        batch_id = yield self.backend.batch_start()
+        all_keys = []
+        start = datetime.utcnow() - timedelta(seconds=10)
+        for i in xrange(5):
+            timestamp = start + timedelta(seconds=i)
+            addr = "addr%s" % (i,)
+            msg = self.msg_helper.make_outbound(
+                "Message %s" % (i,), timestamp=timestamp, to_addr=addr)
+            yield self.backend.add_outbound_message(msg, batch_ids=[batch_id])
+            all_keys.append(
+                (msg["message_id"], vumi_date(timestamp), addr))
+
+        keys_p1 = yield self.backend.list_batch_outbound_keys_with_addresses(
+            batch_id, end=all_keys[-2][1], max_results=3)
+        # Paginated results are sorted by timestamp.
+        self.assertEqual(list(keys_p1), all_keys[0:3])
+
+        keys_p2 = yield keys_p1.next_page()
+        self.assertEqual(list(keys_p2), all_keys[3:-1])
+
+    @inlineCallbacks
+    def test_list_batch_outbound_keys_with_addresses_range(self):
+        """
+        When we ask for a list of outbound message keys with addresses, we can
+        specify both ends of the range.
+        """
+        batch_id = yield self.backend.batch_start()
+        all_keys = []
+        start = datetime.utcnow() - timedelta(seconds=10)
+        for i in xrange(5):
+            timestamp = start + timedelta(seconds=i)
+            addr = "addr%s" % (i,)
+            msg = self.msg_helper.make_outbound(
+                "Message %s" % (i,), timestamp=timestamp, to_addr=addr)
+            yield self.backend.add_outbound_message(msg, batch_ids=[batch_id])
+            all_keys.append(
+                (msg["message_id"], vumi_date(timestamp), addr))
+
+        keys_p1 = yield self.backend.list_batch_outbound_keys_with_addresses(
+            batch_id, start=all_keys[1][1], end=all_keys[-2][1], max_results=2)
+        # Paginated results are sorted by timestamp.
+        self.assertEqual(list(keys_p1), all_keys[1:3])
+
+        keys_p2 = yield keys_p1.next_page()
+        self.assertEqual(list(keys_p2), all_keys[3:-1])
+
+    @inlineCallbacks
+    def test_list_batch_outbound_keys_with_addresses_empty(self):
+        """
+        When we ask for a list of outbound message keys with addresses for an
+        empty batch, we get an empty IndexPageWrapper.
+        """
+        batch_id = yield self.backend.batch_start()
+        keys_page = yield self.backend.list_batch_outbound_keys_with_addresses(
+            batch_id)
         self.assertEqual(list(keys_page), [])

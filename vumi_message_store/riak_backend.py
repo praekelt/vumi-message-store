@@ -204,3 +204,154 @@ class MessageStoreRiakBackend(object):
         return self.events.index_keys_page(
             'message', message_id, max_results=max_results,
             continuation=continuation)
+
+    def _start_end_values(self, batch_id, start, end):
+        if start is not None:
+            start_value = "%s$%s" % (batch_id, start)
+        else:
+            start_value = "%s%s" % (batch_id, "#")  # chr(ord('$') - 1)
+        if end is not None:
+            # We append the "%" to this because we may have another field after
+            # the timestamp and we want to include that in range.
+            end_value = "%s$%s%s" % (batch_id, end, "%")  # chr(ord('$') + 1)
+        else:
+            end_value = "%s%s" % (batch_id, "%")  # chr(ord('$') + 1)
+        return start_value, end_value
+
+    @Manager.calls_manager
+    def list_batch_inbound_keys_with_timestamps(self, batch_id, start=None,
+                                                end=None, max_results=None):
+        """
+        List inbound message keys with timestamps for the given batch.
+        """
+        if max_results is None:
+            max_results = self.DEFAULT_MAX_RESULTS
+        start_value, end_value = self._start_end_values(batch_id, start, end)
+        results = yield self.inbound_messages.index_keys_page(
+            'batches_with_timestamps', start_value, end_value,
+            return_terms=True, max_results=max_results)
+        returnValue(IndexPageWrapper(
+            key_with_timestamp_formatter, self, batch_id, results))
+
+    @Manager.calls_manager
+    def list_batch_outbound_keys_with_timestamps(self, batch_id, start=None,
+                                                 end=None, max_results=None):
+        """
+        List outbound message keys with timestamps for the given batch.
+        """
+        if max_results is None:
+            max_results = self.DEFAULT_MAX_RESULTS
+        start_value, end_value = self._start_end_values(batch_id, start, end)
+        results = yield self.outbound_messages.index_keys_page(
+            'batches_with_timestamps', start_value, end_value,
+            return_terms=True, max_results=max_results)
+        returnValue(IndexPageWrapper(
+            key_with_timestamp_formatter, self, batch_id, results))
+
+    @Manager.calls_manager
+    def list_batch_inbound_keys_with_addresses(self, batch_id, start=None,
+                                               end=None, max_results=None):
+        """
+        List inbound message keys with timestamps and addresses for the given
+        batch.
+        """
+        if max_results is None:
+            max_results = self.DEFAULT_MAX_RESULTS
+        start_value, end_value = self._start_end_values(batch_id, start, end)
+        results = yield self.inbound_messages.index_keys_page(
+            'batches_with_addresses', start_value, end_value,
+            return_terms=True, max_results=max_results)
+        returnValue(IndexPageWrapper(
+            key_with_address_formatter, self, batch_id, results))
+
+    @Manager.calls_manager
+    def list_batch_outbound_keys_with_addresses(self, batch_id, start=None,
+                                                end=None, max_results=None):
+        """
+        List outbound message keys with timestamps and addresses for the given
+        batch.
+        """
+        if max_results is None:
+            max_results = self.DEFAULT_MAX_RESULTS
+        start_value, end_value = self._start_end_values(batch_id, start, end)
+        results = yield self.outbound_messages.index_keys_page(
+            'batches_with_addresses', start_value, end_value,
+            return_terms=True, max_results=max_results)
+        returnValue(IndexPageWrapper(
+            key_with_address_formatter, self, batch_id, results))
+
+
+class IndexPageWrapper(object):
+    """
+    Index page wrapper that reformats index values into something easier to
+    work with.
+
+    This is a wrapper around the lower-level index page object from Riak and
+    proxies a subset of its functionality.
+    """
+    def __init__(self, formatter, message_store, batch_id, index_page):
+        self._formatter = formatter
+        self._message_store = message_store
+        self.manager = message_store.manager
+        self._batch_id = batch_id
+        self._index_page = index_page
+
+    def _wrap_index_page(self, index_page):
+        """
+        Wrap a raw index page object if it is not None.
+        """
+        if index_page is not None:
+            index_page = type(self)(
+                self._formatter, self._message_store, self._batch_id,
+                index_page)
+        return index_page
+
+    @Manager.calls_manager
+    def next_page(self):
+        """
+        Fetch the next page of results.
+
+        :returns:
+            A new :class:`KeysWithTimestamps` object containing the next page
+            of results.
+        """
+        next_page = yield self._index_page.next_page()
+        returnValue(self._wrap_index_page(next_page))
+
+    def has_next_page(self):
+        """
+        Indicate whether there are more results to follow.
+
+        :returns:
+            ``True`` if there are more results, ``False`` if this is the last
+            page.
+        """
+        return self._index_page.has_next_page()
+
+    def __iter__(self):
+        return (self._formatter(self._batch_id, r) for r in self._index_page)
+
+
+def key_with_timestamp_formatter(batch_id, result):
+    value, key = result
+    prefix = batch_id + "$"
+    if not value.startswith(prefix):
+        raise ValueError(
+            "Index value %r does not begin with expected prefix %r." % (
+                value, prefix))
+    return (key, value[len(prefix):])
+
+
+def key_with_address_formatter(batch_id, result):
+    value, key = result
+    prefix = batch_id + "$"
+    if not value.startswith(prefix):
+        raise ValueError(
+            "Index value %r does not begin with expected prefix %r." % (
+                value, prefix))
+    suffix = value[len(prefix):]
+    timestamp, delimiter, address = suffix.partition("$")
+    if delimiter != "$":
+        raise ValueError(
+            "Index value %r does not match expected format." % (value,))
+    return (key, timestamp, address)

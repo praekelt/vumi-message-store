@@ -2,7 +2,7 @@
 Interfaces for various parts of the message store.
 
 The idea is that there will potentially be multiple implementations, and some
-thing may implement multiple interfaces.
+things may implement multiple interfaces.
 """
 
 from zope.interface import Interface
@@ -57,7 +57,12 @@ class IMessageStoreBatchManager(Interface):
         """
         Get tag information from the message store.
 
-        TODO: document params.
+        :param tag:
+            A tag identifier, either in tuple format or a flattened string.
+
+        :returns:
+            A CurrentTag model object.
+            If async, a Deferred is returned instead.
         """
 
 
@@ -225,5 +230,128 @@ class IQueryMessageStore(Interface):
 
         :returns:
             An IndexPage object containing a list of event keys.
+            If async, a Deferred is returned instead.
+        """
+
+    def list_batch_inbound_keys_with_timestamps(batch_id, start=None,
+                                                end=None):
+        """
+        List inbound message keys with timestamps for the given batch.
+
+        :param batch_id:
+            The batch identifier for the batch to operate on.
+
+        :param start:
+            Timestamp denoting the start of a range query.
+
+        :param end:
+            Timestamp denoting the end of a range query.
+
+        :returns:
+            An IndexPage object containing a list of tuples of inbound message
+            key and timestamp.
+            If async, a Deferred is returned instead.
+        """
+
+    def list_batch_outbound_keys_with_timestamps(batch_id, start=None,
+                                                 end=None):
+        """
+        List outbound message keys with timestamps for the given batch.
+
+        :param batch_id:
+            The batch identifier for the batch to operate on.
+
+        :param start:
+            Timestamp denoting the start of a range query.
+
+        :param end:
+            Timestamp denoting the end of a range query.
+
+        :returns:
+            An IndexPage object containing a list of tuples of outbound message
+            key and timestamp.
+            If async, a Deferred is returned instead.
+        """
+
+    def get_batch_info_status(batch_id):
+        """
+        Return a dictionary containing the latest event stats for the given
+        batch_id.
+
+        :param batch_id:
+            The batch identifier for the batch to operate on.
+
+        :returns:
+            A dictionary containing counts for sent messages and events types.
+            If async, a Deferred is returned instead.
+        """
+
+    def list_batch_recent_inbound_keys(batch_id, with_timestamp=False):
+        """
+        Return the list of recent inbound message keys in descending order by
+        timestamp.
+
+        :param batch_id:
+            The batch identifier for the batch to operate on.
+
+        :param bool with_timestamp:
+            If set to ``True``, timestamps will be included in the result.
+
+        :returns:
+            A list of message keys (the default) or (key, timestamp) tuples (if
+            ``with_timestamp`` is set to ``True``).
+            If async, a Deferred is returned instead.
+        """
+
+    def list_batch_recent_outbound_keys(batch_id, with_timestamp=False):
+        """
+        Return the list of recent outbound message keys in descending order by
+        timestamp.
+
+        :param batch_id:
+            The batch identifier for the batch to operate on.
+
+        :param bool with_timestamp:
+            If set to ``True``, timestamps will be included in the result.
+
+        :returns:
+            A list of message keys (the default) or (key, timestamp) tuples (if
+            ``with_timestamp`` is set to ``True``).
+            If async, a Deferred is returned instead.
+        """
+
+    def get_batch_inbound_count(batch_id):
+        """
+        Return the count of inbound messages.
+
+        :param batch_id:
+            The batch identifier for the batch to operate on.
+
+        :returns:
+            The number of inbound messages in the batch.
+            If async, a Deferred is returned instead.
+        """
+
+    def get_batch_outbound_count(batch_id):
+        """
+        Return the count of outbound messages.
+
+        :param batch_id:
+            The batch identifier for the batch to operate on.
+
+        :returns:
+            The number of outbound messages in the batch.
+            If async, a Deferred is returned instead.
+        """
+
+    def get_batch_event_count(batch_id):
+        """
+        Return the count of events.
+
+        :param batch_id:
+            The batch identifier for the batch to operate on.
+
+        :returns:
+            The number of events in the batch.
             If async, a Deferred is returned instead.
         """
