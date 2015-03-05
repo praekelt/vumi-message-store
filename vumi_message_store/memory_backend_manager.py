@@ -17,8 +17,10 @@ from vumi.utils import flatten_generator
 
 class FakeMemoryRiakManager(object):
     """
-    Various things need an object that behaves like a Riak manager. This is
-    that object.
+    This is an in-memory implementation of a subset of the Riak manager's
+    functionality.
+
+    NOTE: This is the minimal subset necessary for MessageStoreRiakBackend.
     """
 
     def __init__(self, state, store_versions=None):
