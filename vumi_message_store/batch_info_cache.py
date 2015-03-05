@@ -117,12 +117,6 @@ class BatchInfoCache(object):
         for event in events:
             yield self.redis.hsetnx(self.status_key(batch_id), event, 0)
 
-    # def get_batch_ids(self):
-    #     """
-    #     Return a list of known batch_ids
-    #     """
-    #     return self.redis.smembers(self.batch_key())
-
     def batch_exists(self, batch_id):
         return self.redis.sismember(self.batch_key(), batch_id)
 
