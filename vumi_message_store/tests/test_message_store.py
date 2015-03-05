@@ -22,7 +22,8 @@ def vumi_date(timestamp):
     return datetime.strftime(timestamp, VUMI_DATE_FORMAT)
 
 
-# TODO: Better way to test indexes.
+# TODO: Better way to test indexes. Currently indexes are retrieved
+#       using ._riak_object.get_indexes().
 
 
 class TestMessageStoreBatchManager(VumiTestCase):
