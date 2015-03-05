@@ -4,15 +4,19 @@
 Tests for vumi_message_store.riak_backend.
 """
 
+# TODO: Test sync and async varieties.
+
 from datetime import datetime, timedelta
 
 from twisted.internet.defer import inlineCallbacks
 from vumi.message import VUMI_DATE_FORMAT
-from vumi.tests.helpers import VumiTestCase, MessageHelper, PersistenceHelper
+from vumi.tests.helpers import MessageHelper, VumiTestCase, PersistenceHelper
 
-from vumi_message_store.riak_backend import MessageStoreRiakBackend
+from vumi_message_store.memory_backend_manager import (
+    FakeRiakState, FakeMemoryRiakManager)
 from vumi_message_store.models import (
     Batch, CurrentTag, InboundMessage, OutboundMessage, Event)
+from vumi_message_store.riak_backend import MessageStoreRiakBackend
 
 
 def vumi_date(timestamp):
@@ -22,14 +26,26 @@ def vumi_date(timestamp):
     return datetime.strftime(timestamp, VUMI_DATE_FORMAT)
 
 
-class TestMessageStoreRiakBackend(VumiTestCase):
+class RiakBackendTestMixin(object):
 
-    def setUp(self):
-        self.persistence_helper = self.add_helper(
-            PersistenceHelper(use_riak=True))
-        self.manager = self.persistence_helper.get_riak_manager()
-        self.backend = MessageStoreRiakBackend(self.manager)
+    def set_up_tests(self):
+        """
+        This should be called from .setUp().
+        """
+        self.backend = self.get_backend()
         self.msg_helper = self.add_helper(MessageHelper())
+
+    def get_backend(self):
+        """
+        Construct a backend object.
+        """
+        raise NotImplementedError(".get_backend() must be implemented.")
+
+    def get_model_proxy(self, modelcls):
+        """
+        Construct a model proxy for the given model class.
+        """
+        raise NotImplementedError(".get_model_proxy() must be implemented.")
 
     @inlineCallbacks
     def test_batch_start_no_params(self):
@@ -1205,3 +1221,27 @@ class TestMessageStoreRiakBackend(VumiTestCase):
         keys_page = yield self.backend.list_message_event_keys_with_statuses(
             "badmsg")
         self.assertEqual(list(keys_page), [])
+
+
+class TestMessageStoreRiakBackend(RiakBackendTestMixin, VumiTestCase):
+
+    def setUp(self):
+        self.persistence_helper = self.add_helper(
+            PersistenceHelper(use_riak=True))
+        self.manager = self.persistence_helper.get_riak_manager()
+        self.set_up_tests()
+
+    def get_backend(self):
+        return MessageStoreRiakBackend(self.manager)
+
+
+class TestMessageStoreRiakBackendInMemory(RiakBackendTestMixin, VumiTestCase):
+
+    def setUp(self):
+        self.state = FakeRiakState(is_async=True)
+        self.add_cleanup(self.state.teardown)
+        self.manager = FakeMemoryRiakManager(self.state)
+        self.set_up_tests()
+
+    def get_backend(self):
+        return MessageStoreRiakBackend(self.manager)
