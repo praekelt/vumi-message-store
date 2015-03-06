@@ -107,18 +107,6 @@ class FakeMemoryRiakManager(object):
             index_name, start_value, end_value, return_terms=return_terms,
             max_results=max_results, continuation=continuation)
 
-    def _load_bunch(self, model, keys):
-        assert len(keys) <= self.load_bunch_size
-        if not keys:
-            return []
-        return self._load_multiple(model, keys)
-
-    def load_all_bunches(self, model, keys):
-        while keys:
-            batch_keys = keys[:self.load_bunch_size]
-            keys = keys[self.load_bunch_size:]
-            yield self._load_bunch(model, batch_keys)
-
 
 class FakeRiakState(object):
     """
@@ -375,7 +363,7 @@ class FakeRiakObject(object):
     # def get_bucket(self):
     #     return VumiTxRiakBucket(self._riak_obj.bucket)
 
-    # # Methods that "touch the network".
+    # Methods that "touch the network".
 
     def store(self):
         self._state.store_object(self)
