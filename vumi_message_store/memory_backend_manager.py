@@ -153,19 +153,19 @@ class FakeRiakState(object):
         Store an object.
         """
         bucket = self._get_bucket(fake_object._bucket_name)
-        bucket["objects"][fake_object._key] = {
+        bucket["objects"][fake_object.key] = {
             "content_type": fake_object._current_data["content_type"],
             "data": json.dumps(fake_object._current_data["data"]),
         }
         indexes = {}
         for index_name, index_value in fake_object._current_data["indexes"]:
             indexes.setdefault(index_name, []).append(
-                (index_value, fake_object._key))
+                (index_value, fake_object.key))
         for index_name, index_values in indexes.iteritems():
             old_indexes = bucket["indexes"].get(index_name, [])
             new_indexes = [
                 (value, key) for value, key in old_indexes
-                if key != fake_object._key]
+                if key != fake_object.key]
             new_indexes.extend(index_values)
             new_indexes.sort()
             bucket["indexes"][index_name] = new_indexes
@@ -175,7 +175,7 @@ class FakeRiakState(object):
         Set an object's data from stored state.
         """
         bucket = self._get_bucket(fake_object._bucket_name)
-        obj_state = bucket["objects"].get(fake_object._key)
+        obj_state = bucket["objects"].get(fake_object.key)
         if obj_state is None:
             fake_object._current_data["data"] = None
             return
@@ -184,7 +184,7 @@ class FakeRiakState(object):
         fake_object._current_data["indexes"] = set()
         for index_name, index_data in bucket["indexes"].iteritems():
             for index_value, key in index_data:
-                if key == fake_object._key:
+                if key == fake_object.key:
                     fake_object._current_data["indexes"].add(
                         (index_name, index_value))
 
@@ -267,14 +267,13 @@ class FakeMemoryIndexPage(object):
 class FakeRiakBucket(object):
     """
     A fake implementation of a Riak bucket object using in-memory state.
+
+    NOTE: This is the minimal subset necessary for MessageStoreRiakBackend.
     """
 
     def __init__(self, state, bucket_name):
         self._state = state
         self._bucket_name = bucket_name
-
-    def get_name(self):
-        return self._bucket_name
 
     # Methods that "touch the network".
 
@@ -294,6 +293,8 @@ class FakeRiakBucket(object):
 class FakeRiakObject(object):
     """
     A fake implementation of a Riak object using in-memory state.
+
+    NOTE: This is the minimal subset necessary for MessageStoreRiakBackend.
     """
 
     def __init__(self, state, bucket_name, key):
@@ -310,12 +311,6 @@ class FakeRiakObject(object):
     def key(self):
         return self._key
 
-    def get_key(self):
-        return self.key
-
-    def get_content_type(self):
-        return self._current_data["content_type"]
-
     def set_content_type(self, content_type):
         self._current_data["content_type"] = content_type
 
@@ -325,9 +320,6 @@ class FakeRiakObject(object):
     def set_data(self, data):
         self._current_data["data"] = data
 
-    # def set_encoded_data(self, encoded_data):
-    #     self._riak_obj.encoded_data = encoded_data
-
     def set_data_field(self, key, value):
         self._current_data["data"][key] = value
 
@@ -336,9 +328,6 @@ class FakeRiakObject(object):
 
     def get_indexes(self):
         return self._current_data["indexes"]
-
-    # def set_indexes(self, indexes):
-    #     self._riak_obj.indexes = indexes
 
     def add_index(self, index_name, index_value):
         self._current_data["indexes"].add((index_name, index_value))
@@ -354,15 +343,6 @@ class FakeRiakObject(object):
         else:
             indexes.remove((index_name, index_value))
 
-    # def get_user_metadata(self):
-    #     return self._riak_obj.usermeta
-
-    # def set_user_metadata(self, usermeta):
-    #     self._riak_obj.usermeta = usermeta
-
-    # def get_bucket(self):
-    #     return VumiTxRiakBucket(self._riak_obj.bucket)
-
     # Methods that "touch the network".
 
     def store(self):
@@ -374,8 +354,3 @@ class FakeRiakObject(object):
         new_obj._current_data = self._current_data
         self._state._reload_object_state(new_obj)
         return self._state.delayed_result(new_obj)
-
-    # def delete(self):
-    #     d = deferToThread(self._riak_obj.delete)
-    #     d.addCallback(type(self))
-    #     return d
