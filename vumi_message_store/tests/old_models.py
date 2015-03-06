@@ -5,7 +5,7 @@ from vumi.message import TransportUserMessage, TransportEvent
 from vumi.persist.model import Model
 from vumi.persist.fields import (
     VumiMessage, ForeignKey, ListOf, Dynamic, Tag, Unicode, ManyToMany)
-from vumi.components.message_store_migrators import (
+from vumi_message_store.migrators import (
     InboundMessageMigrator, OutboundMessageMigrator)
 
 

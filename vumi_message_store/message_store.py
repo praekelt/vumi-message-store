@@ -1,4 +1,4 @@
-# -*- test-case-name: vumi.components.tests.test_message_store -*-
+# -*- test-case-name: vumi_message_store.tests.test_message_store -*-
 
 """Message store."""
 
