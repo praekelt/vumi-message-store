@@ -1238,7 +1238,32 @@ class TestMessageStoreRiakBackend(RiakBackendTestMixin, VumiTestCase):
 class TestMessageStoreRiakBackendInMemory(RiakBackendTestMixin, VumiTestCase):
 
     def setUp(self):
-        self.state = FakeRiakState(is_async=True)
+        self.state = FakeRiakState(is_sync=False)
+        self.add_cleanup(self.state.teardown)
+        self.manager = FakeMemoryRiakManager(self.state)
+        self.set_up_tests()
+
+    def get_backend(self):
+        return MessageStoreRiakBackend(self.manager)
+
+
+class TestMessageStoreRiakBackendSync(RiakBackendTestMixin, VumiTestCase):
+
+    def setUp(self):
+        self.persistence_helper = self.add_helper(
+            PersistenceHelper(use_riak=True, is_sync=True))
+        self.manager = self.persistence_helper.get_riak_manager()
+        self.set_up_tests()
+
+    def get_backend(self):
+        return MessageStoreRiakBackend(self.manager)
+
+
+class TestMessageStoreRiakBackendInMemorySync(RiakBackendTestMixin,
+                                              VumiTestCase):
+
+    def setUp(self):
+        self.state = FakeRiakState(is_sync=True)
         self.add_cleanup(self.state.teardown)
         self.manager = FakeMemoryRiakManager(self.state)
         self.set_up_tests()

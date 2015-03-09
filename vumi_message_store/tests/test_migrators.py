@@ -587,7 +587,7 @@ class TestInboundMessageMigrator(InboundMessageMigratorTestMixin,
 
 class TestEventMigratorInMemory(EventMigratorTestMixin, VumiTestCase):
     def setUp(self):
-        self.state = FakeRiakState(is_async=True)
+        self.state = FakeRiakState(is_sync=False)
         self.add_cleanup(self.state.teardown)
         self.manager = FakeMemoryRiakManager(self.state)
         self.msg_helper = self.add_helper(MessageHelper())
@@ -597,7 +597,7 @@ class TestEventMigratorInMemory(EventMigratorTestMixin, VumiTestCase):
 class TestOutboundMessageMigratorInMemory(OutboundMessageMigratorTestMixin,
                                           VumiTestCase):
     def setUp(self):
-        self.state = FakeRiakState(is_async=True)
+        self.state = FakeRiakState(is_sync=False)
         self.add_cleanup(self.state.teardown)
         self.manager = FakeMemoryRiakManager(self.state)
         self.msg_helper = self.add_helper(MessageHelper())
@@ -607,7 +607,7 @@ class TestOutboundMessageMigratorInMemory(OutboundMessageMigratorTestMixin,
 class TestInboundMessageMigratorInMemory(InboundMessageMigratorTestMixin,
                                          VumiTestCase):
     def setUp(self):
-        self.state = FakeRiakState(is_async=True)
+        self.state = FakeRiakState(is_sync=False)
         self.add_cleanup(self.state.teardown)
         self.manager = FakeMemoryRiakManager(self.state)
         self.msg_helper = self.add_helper(MessageHelper())

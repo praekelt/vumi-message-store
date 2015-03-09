@@ -25,12 +25,15 @@ class FakeMemoryRiakManager(object):
 
     def __init__(self, state, store_versions=None):
         self._state = state
-        self._is_async = state._is_async
-        if self._is_async:
-            self.call_decorator = inlineCallbacks
-        else:
+        self._is_sync = state._is_sync
+        if self._is_sync:
             self.call_decorator = flatten_generator
+        else:
+            self.call_decorator = inlineCallbacks
         self.store_versions = store_versions or {}
+        # Wrap the methods that need to handle async stuff.
+        self.load = self.call_decorator(self._internal_load)
+        self.store = self.call_decorator(self._internal_store)
 
     def proxy(self, modelcls):
         """
@@ -58,7 +61,10 @@ class FakeMemoryRiakManager(object):
         riak_object.set_data({'$VERSION': modelcls.VERSION})
         return riak_object
 
-    def store(self, modelobj):
+    def _internal_store(self, modelobj):
+        """
+        This method gets wrapped in a sync or async decorator in __init__().
+        """
         riak_object = modelobj._riak_object
         modelcls = type(modelobj)
         model_name = "%s.%s" % (modelcls.__module__, modelcls.__name__)
@@ -70,12 +76,13 @@ class FakeMemoryRiakManager(object):
                 modelcls, self, data_version, reverse=True)
             riak_object = migrator(riak_object).get_riak_object()
             data_version = riak_object.get_data().get('$VERSION', None)
-        d = riak_object.store()
-        d.addCallback(lambda _: modelobj)
-        return d
+        yield riak_object.store()
+        returnValue(modelobj)
 
-    @inlineCallbacks
-    def load(self, modelcls, key, result=None):
+    def _internal_load(self, modelcls, key, result=None):
+        """
+        This method gets wrapped in a sync or async decorator in __init__().
+        """
         assert result is None
         riak_object = self.riak_object(modelcls, key)
         yield riak_object.reload()
@@ -113,9 +120,9 @@ class FakeRiakState(object):
     An object to hold fake Riak state.
     """
 
-    def __init__(self, is_async):
+    def __init__(self, is_sync):
         self._buckets = {}
-        self._is_async = is_async
+        self._is_sync = is_sync
         self._delayed_calls = []
 
     def teardown(self):
@@ -128,16 +135,16 @@ class FakeRiakState(object):
         If in async mode, return the result with some delay to catch code that
         doesn't properly wait for the deferred to fire.
         """
-        if self._is_async:
-            # Add some latency to catch things that don't wait on deferreds. We
-            # can't use deferLater() here because we want to keep track of the
-            # delayed call object.
-            d = Deferred()
-            delayed = reactor.callLater(0.002, d.callback, result)
-            self._delayed_calls.append(delayed)
-            return d
-        else:
+        if self._is_sync:
             return result
+
+        # Add some latency to catch things that don't wait on deferreds. We
+        # can't use deferLater() here because we want to keep track of the
+        # delayed call object.
+        d = Deferred()
+        delayed = reactor.callLater(0.002, d.callback, result)
+        self._delayed_calls.append(delayed)
+        return d
 
     def _get_bucket(self, bucket_name):
         """
