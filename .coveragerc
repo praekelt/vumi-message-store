@@ -1,6 +1,6 @@
 [run]
 branch = True
-source = vumi
+source = vumi_message_store
 
 [report]
 exclude_lines = 
