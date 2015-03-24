@@ -130,19 +130,20 @@ class FakeRiakState(object):
             if not (delayed.cancelled or delayed.called):
                 delayed.cancel()
 
-    def delayed_result(self, result):
+    def _with_async_delay(self, func, *args, **kw):
         """
-        If in async mode, return the result with some delay to catch code that
-        doesn't properly wait for the deferred to fire.
+        If in async mode, add some delay to catch code that doesn't properly
+        wait for the deferred to fire.
         """
         if self._is_sync:
-            return result
+            return func(*args, **kw)
 
         # Add some latency to catch things that don't wait on deferreds. We
         # can't use deferLater() here because we want to keep track of the
         # delayed call object.
         d = Deferred()
-        delayed = reactor.callLater(0.002, d.callback, result)
+        delayed = reactor.callLater(
+            0.002, lambda _: d.callback(func(*args, **kw)), None)
         self._delayed_calls.append(delayed)
         return d
 
@@ -291,10 +292,11 @@ class FakeRiakBucket(object):
 
     def get_index_page(self, index_name, start_value, end_value=None,
                        return_terms=None, max_results=None, continuation=None):
-        return self._state.delayed_result(self._state.get_index_page(
+        return self._state._with_async_delay(
+            self._state.get_index_page,
             self._bucket_name, index_name, start_value, end_value,
             return_terms=return_terms, max_results=max_results,
-            continuation=continuation))
+            continuation=continuation)
 
 
 class FakeRiakObject(object):
@@ -352,12 +354,18 @@ class FakeRiakObject(object):
 
     # Methods that "touch the network".
 
-    def store(self):
-        self._state.store_object(self)
-        return self.reload()
-
-    def reload(self):
+    def _reload(self):
         new_obj = type(self)(self._state, self._bucket_name, self._key)
         new_obj._current_data = self._current_data
         self._state._reload_object_state(new_obj)
-        return self._state.delayed_result(new_obj)
+        return new_obj
+
+    def _store(self):
+        self._state.store_object(self)
+        return self._reload()
+
+    def store(self):
+        return self._state._with_async_delay(self._store)
+
+    def reload(self):
+        return self._state._with_async_delay(self._reload)
