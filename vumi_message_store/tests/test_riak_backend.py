@@ -8,11 +8,13 @@ from datetime import datetime, timedelta
 
 from twisted.internet.defer import inlineCallbacks
 from vumi.message import VUMI_DATE_FORMAT
-from vumi.tests.helpers import VumiTestCase, MessageHelper, PersistenceHelper
+from vumi.tests.helpers import MessageHelper, VumiTestCase, PersistenceHelper
 
-from vumi_message_store.riak_backend import MessageStoreRiakBackend
+from vumi_message_store.memory_backend_manager import (
+    FakeRiakState, FakeMemoryRiakManager)
 from vumi_message_store.models import (
     Batch, CurrentTag, InboundMessage, OutboundMessage, Event)
+from vumi_message_store.riak_backend import MessageStoreRiakBackend
 
 
 def vumi_date(timestamp):
@@ -22,12 +24,13 @@ def vumi_date(timestamp):
     return datetime.strftime(timestamp, VUMI_DATE_FORMAT)
 
 
-class TestMessageStoreRiakBackend(VumiTestCase):
+class RiakBackendTestMixin(object):
 
-    def setUp(self):
-        self.persistence_helper = self.add_helper(
-            PersistenceHelper(use_riak=True))
-        self.manager = self.persistence_helper.get_riak_manager()
+    def set_up_tests(self, manager):
+        """
+        This should be called from .setUp().
+        """
+        self.manager = manager
         self.backend = MessageStoreRiakBackend(self.manager)
         self.msg_helper = self.add_helper(MessageHelper())
 
@@ -1205,3 +1208,36 @@ class TestMessageStoreRiakBackend(VumiTestCase):
         keys_page = yield self.backend.list_message_event_keys_with_statuses(
             "badmsg")
         self.assertEqual(list(keys_page), [])
+
+
+class TestMessageStoreRiakBackend(RiakBackendTestMixin, VumiTestCase):
+
+    def setUp(self):
+        self.persistence_helper = self.add_helper(
+            PersistenceHelper(use_riak=True))
+        self.set_up_tests(self.persistence_helper.get_riak_manager())
+
+
+class TestMessageStoreRiakBackendInMemory(RiakBackendTestMixin, VumiTestCase):
+
+    def setUp(self):
+        self.state = FakeRiakState(is_sync=False)
+        self.add_cleanup(self.state.teardown)
+        self.set_up_tests(FakeMemoryRiakManager(self.state))
+
+
+class TestMessageStoreRiakBackendSync(RiakBackendTestMixin, VumiTestCase):
+
+    def setUp(self):
+        self.persistence_helper = self.add_helper(
+            PersistenceHelper(use_riak=True, is_sync=True))
+        self.set_up_tests(self.persistence_helper.get_riak_manager())
+
+
+class TestMessageStoreRiakBackendInMemorySync(RiakBackendTestMixin,
+                                              VumiTestCase):
+
+    def setUp(self):
+        self.state = FakeRiakState(is_sync=True)
+        self.add_cleanup(self.state.teardown)
+        self.set_up_tests(FakeMemoryRiakManager(self.state))

@@ -60,9 +60,9 @@ class MessageStoreRiakBackend(object):
         """
         batch = yield self.batches.load(batch_id)
         tag_keys = yield batch.backlinks.currenttags()
-        for tags_bunch in self.manager.load_all_bunches(CurrentTag, tag_keys):
-            tags = yield tags_bunch
-            for tag in tags:
+        for tag_key in tag_keys:
+            tag = yield self.current_tags.load(tag_key)
+            if tag is not None:
                 tag.current_batch.set(None)
                 yield tag.save()
 

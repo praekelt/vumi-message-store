@@ -9,6 +9,8 @@ from vumi_message_store.tests.old_models import (
     InboundMessageVNone, OutboundMessageVNone,
     InboundMessageV1, OutboundMessageV1,
     InboundMessageV2, OutboundMessageV2)
+from vumi_message_store.memory_backend_manager import (
+    FakeRiakState, FakeMemoryRiakManager)
 from vumi_message_store.models import (
     InboundMessage as InboundMessageV3,
     OutboundMessage as OutboundMessageV3,
@@ -43,18 +45,9 @@ def bwa_index(value):
     return ("batches_with_addresses_bin", value)
 
 
-class TestMigratorBase(VumiTestCase):
-    def setUp(self):
-        self.persistence_helper = self.add_helper(
-            PersistenceHelper(use_riak=True))
-        self.manager = self.persistence_helper.get_riak_manager()
-        self.msg_helper = self.add_helper(MessageHelper())
+class EventMigratorTestMixin(object):
 
-
-class TestEventMigrator(TestMigratorBase):
-    @inlineCallbacks
-    def setUp(self):
-        yield super(TestEventMigrator, self).setUp()
+    def set_up_proxies(self):
         self.event_vnone = self.manager.proxy(EventVNone)
         self.event_v1 = self.manager.proxy(EventV1)
 
@@ -148,10 +141,8 @@ class TestEventMigrator(TestMigratorBase):
         ]))
 
 
-class TestOutboundMessageMigrator(TestMigratorBase):
-    @inlineCallbacks
-    def setUp(self):
-        yield super(TestOutboundMessageMigrator, self).setUp()
+class OutboundMessageMigratorTestMixin(object):
+    def set_up_proxies(self):
         self.outbound_vnone = self.manager.proxy(OutboundMessageVNone)
         self.outbound_v1 = self.manager.proxy(OutboundMessageV1)
         self.outbound_v2 = self.manager.proxy(OutboundMessageV2)
@@ -357,11 +348,9 @@ class TestOutboundMessageMigrator(TestMigratorBase):
         self.assertEqual(old_record.batches.keys(), [batch_1.key, batch_2.key])
 
 
-class TestInboundMessageMigrator(TestMigratorBase):
+class InboundMessageMigratorTestMixin(object):
 
-    @inlineCallbacks
-    def setUp(self):
-        yield super(TestInboundMessageMigrator, self).setUp()
+    def set_up_proxies(self):
         self.inbound_vnone = self.manager.proxy(InboundMessageVNone)
         self.inbound_v1 = self.manager.proxy(InboundMessageV1)
         self.inbound_v2 = self.manager.proxy(InboundMessageV2)
@@ -565,3 +554,61 @@ class TestInboundMessageMigrator(TestMigratorBase):
         old_record = yield self.inbound_v2.load(new_record.key)
         self.assertEqual(old_record.msg, msg)
         self.assertEqual(old_record.batches.keys(), [batch_1.key, batch_2.key])
+
+
+class TestEventMigrator(EventMigratorTestMixin, VumiTestCase):
+    def setUp(self):
+        self.persistence_helper = self.add_helper(
+            PersistenceHelper(use_riak=True))
+        self.manager = self.persistence_helper.get_riak_manager()
+        self.msg_helper = self.add_helper(MessageHelper())
+        self.set_up_proxies()
+
+
+class TestOutboundMessageMigrator(OutboundMessageMigratorTestMixin,
+                                  VumiTestCase):
+    def setUp(self):
+        self.persistence_helper = self.add_helper(
+            PersistenceHelper(use_riak=True))
+        self.manager = self.persistence_helper.get_riak_manager()
+        self.msg_helper = self.add_helper(MessageHelper())
+        self.set_up_proxies()
+
+
+class TestInboundMessageMigrator(InboundMessageMigratorTestMixin,
+                                 VumiTestCase):
+    def setUp(self):
+        self.persistence_helper = self.add_helper(
+            PersistenceHelper(use_riak=True))
+        self.manager = self.persistence_helper.get_riak_manager()
+        self.msg_helper = self.add_helper(MessageHelper())
+        self.set_up_proxies()
+
+
+class TestEventMigratorInMemory(EventMigratorTestMixin, VumiTestCase):
+    def setUp(self):
+        self.state = FakeRiakState(is_sync=False)
+        self.add_cleanup(self.state.teardown)
+        self.manager = FakeMemoryRiakManager(self.state)
+        self.msg_helper = self.add_helper(MessageHelper())
+        self.set_up_proxies()
+
+
+class TestOutboundMessageMigratorInMemory(OutboundMessageMigratorTestMixin,
+                                          VumiTestCase):
+    def setUp(self):
+        self.state = FakeRiakState(is_sync=False)
+        self.add_cleanup(self.state.teardown)
+        self.manager = FakeMemoryRiakManager(self.state)
+        self.msg_helper = self.add_helper(MessageHelper())
+        self.set_up_proxies()
+
+
+class TestInboundMessageMigratorInMemory(InboundMessageMigratorTestMixin,
+                                         VumiTestCase):
+    def setUp(self):
+        self.state = FakeRiakState(is_sync=False)
+        self.add_cleanup(self.state.teardown)
+        self.manager = FakeMemoryRiakManager(self.state)
+        self.msg_helper = self.add_helper(MessageHelper())
+        self.set_up_proxies()
