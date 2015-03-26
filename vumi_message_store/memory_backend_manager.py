@@ -226,8 +226,7 @@ class FakeRiakState(object):
         continuation = None
         truncated_results = results[:max_results]
         if len(truncated_results) < len(results):
-            continuation = base64.b64encode(
-                json.dumps(list(results[max_results])))
+            continuation = base64.b64encode(json.dumps(results[max_results]))
         return self._return_index_page(
             bucket_name, index_name, start_value, end_value, return_terms,
             max_results, truncated_results, continuation=continuation)
