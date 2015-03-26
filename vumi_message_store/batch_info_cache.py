@@ -160,16 +160,17 @@ class BatchInfoCache(object):
     @Manager.calls_manager
     def add_inbound_message(self, batch_id, msg):
         """
-        Add an inbound message to the cache for the given batch_id
+        Add an inbound message to the cache for the given batch_id.
         """
         timestamp = to_timestamp(msg["timestamp"])
         yield self.add_inbound_message_key(
             batch_id, msg["message_id"], timestamp)
+        yield self.add_from_addr(batch_id, msg['from_addr'])
 
     @Manager.calls_manager
     def add_inbound_message_key(self, batch_id, message_key, timestamp):
         """
-        Add a message key, weighted with the timestamp to the batch_id
+        Add a message key, weighted with the timestamp to the batch_id.
         """
         new_entry = yield self.redis.zadd(self.inbound_key(batch_id), **{
             message_key.encode('utf-8'): timestamp,
@@ -178,14 +179,22 @@ class BatchInfoCache(object):
             yield self.redis.incr(self.inbound_count_key(batch_id))
             yield self.truncate_inbound_message_keys(batch_id)
 
+    def add_from_addr(self, batch_id, from_addr):
+        """
+        Add a from address to the HyperLogLog counter for the batch.
+        """
+        return self.redis.pfadd(
+            self.from_addr_key(batch_id), from_addr.encode('utf-8'))
+
     @Manager.calls_manager
     def add_outbound_message(self, batch_id, msg):
         """
-        Add an outbound message to the cache for the given batch_id
+        Add an outbound message to the cache for the given batch_id.
         """
         timestamp = to_timestamp(msg['timestamp'])
         yield self.add_outbound_message_key(
             batch_id, msg['message_id'], timestamp)
+        yield self.add_to_addr(batch_id, msg['to_addr'])
 
     @Manager.calls_manager
     def add_outbound_message_key(self, batch_id, message_key, timestamp):
@@ -199,6 +208,13 @@ class BatchInfoCache(object):
             yield self.increment_event_status(batch_id, 'sent')
             yield self.redis.incr(self.outbound_count_key(batch_id))
             yield self.truncate_outbound_message_keys(batch_id)
+
+    def add_to_addr(self, batch_id, to_addr):
+        """
+        Add a from address to the HyperLogLog counter for the batch.
+        """
+        return self.redis.pfadd(
+            self.to_addr_key(batch_id), to_addr.encode('utf-8'))
 
     @Manager.calls_manager
     def add_event(self, batch_id, event):
@@ -328,20 +344,22 @@ class BatchInfoCache(object):
         yield self.clear_batch(batch_id)
         yield self.batch_start(batch_id)
 
-        inbound_page = yield qms.list_batch_inbound_keys_with_timestamps(
+        inbound_page = yield qms.list_batch_inbound_keys_with_addresses(
             batch_id, max_results=page_size)
         while inbound_page is not None:
-            for key, timestamp in inbound_page:
+            for key, timestamp, from_addr in inbound_page:
                 yield self.add_inbound_message_key(
                     batch_id, key, to_timestamp(timestamp))
+                yield self.add_from_addr(batch_id, from_addr)
             inbound_page = yield inbound_page.next_page()
 
-        outbound_page = yield qms.list_batch_outbound_keys_with_timestamps(
+        outbound_page = yield qms.list_batch_outbound_keys_with_addresses(
             batch_id, max_results=page_size)
         while outbound_page is not None:
-            for key, timestamp in outbound_page:
+            for key, timestamp, to_addr in outbound_page:
                 yield self.add_outbound_message_key(
                     batch_id, key, to_timestamp(timestamp))
+                yield self.add_to_addr(batch_id, to_addr)
                 event_page = yield qms.list_message_event_keys_with_statuses(
                     key)
                 while event_page is not None:

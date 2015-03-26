@@ -64,6 +64,11 @@ class TestBatchInfoCache(VumiTestCase):
         self.assertEqual(expected_value, value)
 
     @inlineCallbacks
+    def assert_redis_pfcount(self, key, expected_value):
+        value = yield self.redis.pfcount(key)
+        self.assertEqual(expected_value, value)
+
+    @inlineCallbacks
     def test_batch_start(self):
         """
         Starting a batch creates and initialises counters and adds the batch
@@ -157,6 +162,7 @@ class TestBatchInfoCache(VumiTestCase):
             "batches:outbound_count:mybatch",
             "batches:event_count:mybatch",
             "batches:status:mybatch",
+            "batches:from_addr_hll:mybatch",
         ])
 
         timestamp = to_timestamp(msg["timestamp"])
@@ -174,6 +180,7 @@ class TestBatchInfoCache(VumiTestCase):
             "delivery_report.failed": "0",
             "delivery_report.pending": "0",
         })
+        yield self.assert_redis_pfcount("batches:from_addr_hll:mybatch", 1)
 
     @inlineCallbacks
     def test_add_inbound_message_key(self):
@@ -265,6 +272,35 @@ class TestBatchInfoCache(VumiTestCase):
         yield self.assert_redis_string("batches:inbound_count:batch", "5")
 
     @inlineCallbacks
+    def test_add_from_addrs(self):
+        """
+        Adding a from_addr updates the HyperLogLog counter for the batch.
+        """
+        yield self.batch_info_cache.batch_start("mybatch")
+        incr = yield self.batch_info_cache.add_from_addr("mybatch", "from-1")
+        self.assertEqual(incr, 1)
+
+        yield self.assert_redis_keys([
+            "batches",
+            "batches:inbound_count:mybatch",
+            "batches:outbound_count:mybatch",
+            "batches:event_count:mybatch",
+            "batches:status:mybatch",
+            "batches:from_addr_hll:mybatch",
+        ])
+        yield self.assert_redis_pfcount("batches:from_addr_hll:mybatch", 1)
+
+        # Adding a second address updates the counter.
+        incr = yield self.batch_info_cache.add_from_addr("mybatch", "from-2")
+        self.assertEqual(incr, 1)
+        yield self.assert_redis_pfcount("batches:from_addr_hll:mybatch", 2)
+
+        # Adding a previously-added address doesn't update the counter.
+        incr = yield self.batch_info_cache.add_from_addr("mybatch", "from-1")
+        self.assertEqual(incr, 0)
+        yield self.assert_redis_pfcount("batches:from_addr_hll:mybatch", 2)
+
+    @inlineCallbacks
     def test_add_outbound_message(self):
         """
         Adding an outbound message updates the relevant counters and adds the
@@ -281,6 +317,7 @@ class TestBatchInfoCache(VumiTestCase):
             "batches:outbound_count:mybatch",
             "batches:event_count:mybatch",
             "batches:status:mybatch",
+            "batches:to_addr_hll:mybatch",
         ])
 
         timestamp = to_timestamp(msg["timestamp"])
@@ -298,6 +335,7 @@ class TestBatchInfoCache(VumiTestCase):
             "delivery_report.failed": "0",
             "delivery_report.pending": "0",
         })
+        yield self.assert_redis_pfcount("batches:to_addr_hll:mybatch", 1)
 
     @inlineCallbacks
     def test_add_outbound_message_key(self):
@@ -387,6 +425,35 @@ class TestBatchInfoCache(VumiTestCase):
         yield self.batch_info_cache.add_outbound_message_key("batch", *msgs[4])
         yield self.assert_redis_zset("batches:outbound:batch", msgs[2:5])
         yield self.assert_redis_string("batches:outbound_count:batch", "5")
+
+    @inlineCallbacks
+    def test_add_to_addrs(self):
+        """
+        Adding a to_addr updates the HyperLogLog counter for the batch.
+        """
+        yield self.batch_info_cache.batch_start("mybatch")
+        incr = yield self.batch_info_cache.add_to_addr("mybatch", "from-1")
+        self.assertEqual(incr, 1)
+
+        yield self.assert_redis_keys([
+            "batches",
+            "batches:inbound_count:mybatch",
+            "batches:outbound_count:mybatch",
+            "batches:event_count:mybatch",
+            "batches:status:mybatch",
+            "batches:to_addr_hll:mybatch",
+        ])
+        yield self.assert_redis_pfcount("batches:to_addr_hll:mybatch", 1)
+
+        # Adding a second address updates the counter.
+        incr = yield self.batch_info_cache.add_to_addr("mybatch", "from-2")
+        self.assertEqual(incr, 1)
+        yield self.assert_redis_pfcount("batches:to_addr_hll:mybatch", 2)
+
+        # Adding a previously-added address doesn't update the counter.
+        incr = yield self.batch_info_cache.add_to_addr("mybatch", "from-1")
+        self.assertEqual(incr, 0)
+        yield self.assert_redis_pfcount("batches:to_addr_hll:mybatch", 2)
 
     @inlineCallbacks
     def test_add_event_ack(self):
@@ -990,6 +1057,8 @@ class TestBatchInfoCache(VumiTestCase):
             "batches:outbound_count:mybatch",
             "batches:event_count:mybatch",
             "batches:status:mybatch",
+            "batches:to_addr_hll:mybatch",
+            "batches:from_addr_hll:mybatch",
         ])
         yield self.assert_redis_set("batches", ["mybatch"])
         yield self.assert_redis_string("batches:inbound_count:mybatch", "5")
@@ -1007,6 +1076,8 @@ class TestBatchInfoCache(VumiTestCase):
         yield self.assert_redis_zset("batches:inbound:mybatch", inbound_keys)
         yield self.assert_redis_zset("batches:outbound:mybatch", outbound_keys)
         yield self.assert_redis_zset("batches:event:mybatch", event_keys)
+        yield self.assert_redis_pfcount("batches:to_addr_hll:mybatch", 1)
+        yield self.assert_redis_pfcount("batches:from_addr_hll:mybatch", 1)
 
     @inlineCallbacks
     def test_rebuild_cache_uncached_batch(self):
@@ -1064,6 +1135,8 @@ class TestBatchInfoCache(VumiTestCase):
             "batches:outbound_count:mybatch",
             "batches:event_count:mybatch",
             "batches:status:mybatch",
+            "batches:to_addr_hll:mybatch",
+            "batches:from_addr_hll:mybatch",
         ])
         yield self.assert_redis_set("batches", ["mybatch"])
         yield self.assert_redis_string("batches:inbound_count:mybatch", "5")
@@ -1081,6 +1154,8 @@ class TestBatchInfoCache(VumiTestCase):
         yield self.assert_redis_zset("batches:inbound:mybatch", inbound_keys)
         yield self.assert_redis_zset("batches:outbound:mybatch", outbound_keys)
         yield self.assert_redis_zset("batches:event:mybatch", event_keys)
+        yield self.assert_redis_pfcount("batches:to_addr_hll:mybatch", 1)
+        yield self.assert_redis_pfcount("batches:from_addr_hll:mybatch", 1)
 
     @inlineCallbacks
     def test_rebuild_cache_missing_batch(self):
