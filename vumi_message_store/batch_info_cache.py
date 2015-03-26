@@ -37,8 +37,8 @@ class BatchInfoCache(object):
     OUTBOUND_COUNT_KEY = 'outbound_count'
     INBOUND_KEY = 'inbound'
     INBOUND_COUNT_KEY = 'inbound_count'
-    TO_ADDR_KEY = 'to_addr'
-    FROM_ADDR_KEY = 'from_addr'
+    TO_ADDR_KEY = 'to_addr_hll'
+    FROM_ADDR_KEY = 'from_addr_hll'
     EVENT_KEY = 'event'
     EVENT_COUNT_KEY = 'event_count'
     STATUS_KEY = 'status'
@@ -67,6 +67,12 @@ class BatchInfoCache(object):
     def inbound_count_key(self, batch_id):
         return self.batch_key(self.INBOUND_COUNT_KEY, batch_id)
 
+    def to_addr_key(self, batch_id):
+        return self.batch_key(self.TO_ADDR_KEY, batch_id)
+
+    def from_addr_key(self, batch_id):
+        return self.batch_key(self.FROM_ADDR_KEY, batch_id)
+
     def status_key(self, batch_id):
         return self.batch_key(self.STATUS_KEY, batch_id)
 
@@ -75,6 +81,15 @@ class BatchInfoCache(object):
 
     def event_count_key(self, batch_id):
         return self.batch_key(self.EVENT_COUNT_KEY, batch_id)
+
+    def obsolete_keys(self, batch_id):
+        """
+        Return a list of obsolete keys that should be cleared.
+        """
+        return [
+            self.batch_key("to_addr", batch_id),
+            self.batch_key("from_addr", batch_id),
+        ]
 
     @Manager.calls_manager
     def _truncate_keys(self, redis_key, truncate_at):
@@ -131,6 +146,8 @@ class BatchInfoCache(object):
                 cached values your UI values might be off while the
                 reconciliation is taking place.
         """
+        for key in self.obsolete_keys(batch_id):
+            yield self.redis.delete(key)
         yield self.redis.delete(self.inbound_key(batch_id))
         yield self.redis.delete(self.inbound_count_key(batch_id))
         yield self.redis.delete(self.outbound_key(batch_id))

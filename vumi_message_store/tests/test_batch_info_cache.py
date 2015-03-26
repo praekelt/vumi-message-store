@@ -112,6 +112,9 @@ class TestBatchInfoCache(VumiTestCase):
         batch identifier from the set of batches we're tracking.
         """
         yield self.batch_info_cache.batch_start("mybatch")
+        # Obsolete keys that we no longer use but should still clear.
+        yield self.redis.zadd("batches:to_addr:mybatch", foo=123)
+        yield self.redis.zadd("batches:from_addr:mybatch", foo=123)
         timestamp = to_timestamp(datetime.utcnow())
         yield self.batch_info_cache.add_inbound_message_key(
             "mybatch", "in", timestamp)
@@ -128,6 +131,8 @@ class TestBatchInfoCache(VumiTestCase):
             "batches:outbound_count:mybatch",
             "batches:event_count:mybatch",
             "batches:status:mybatch",
+            "batches:to_addr:mybatch",
+            "batches:from_addr:mybatch",
         ])
         yield self.assert_redis_set("batches", ["mybatch"])
 
