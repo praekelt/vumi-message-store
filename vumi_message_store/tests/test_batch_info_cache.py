@@ -277,7 +277,7 @@ class TestBatchInfoCache(VumiTestCase):
         Adding a from_addr updates the HyperLogLog counter for the batch.
         """
         yield self.batch_info_cache.batch_start("mybatch")
-        incr = yield self.batch_info_cache.add_from_addr("mybatch", "from-1")
+        incr = yield self.batch_info_cache.add_from_addr("mybatch", "addr-1")
         self.assertEqual(incr, 1)
 
         yield self.assert_redis_keys([
@@ -291,12 +291,12 @@ class TestBatchInfoCache(VumiTestCase):
         yield self.assert_redis_pfcount("batches:from_addr_hll:mybatch", 1)
 
         # Adding a second address updates the counter.
-        incr = yield self.batch_info_cache.add_from_addr("mybatch", "from-2")
+        incr = yield self.batch_info_cache.add_from_addr("mybatch", "addr-2")
         self.assertEqual(incr, 1)
         yield self.assert_redis_pfcount("batches:from_addr_hll:mybatch", 2)
 
         # Adding a previously-added address doesn't update the counter.
-        incr = yield self.batch_info_cache.add_from_addr("mybatch", "from-1")
+        incr = yield self.batch_info_cache.add_from_addr("mybatch", "addr-1")
         self.assertEqual(incr, 0)
         yield self.assert_redis_pfcount("batches:from_addr_hll:mybatch", 2)
 
@@ -432,7 +432,7 @@ class TestBatchInfoCache(VumiTestCase):
         Adding a to_addr updates the HyperLogLog counter for the batch.
         """
         yield self.batch_info_cache.batch_start("mybatch")
-        incr = yield self.batch_info_cache.add_to_addr("mybatch", "from-1")
+        incr = yield self.batch_info_cache.add_to_addr("mybatch", "addr-1")
         self.assertEqual(incr, 1)
 
         yield self.assert_redis_keys([
@@ -446,12 +446,12 @@ class TestBatchInfoCache(VumiTestCase):
         yield self.assert_redis_pfcount("batches:to_addr_hll:mybatch", 1)
 
         # Adding a second address updates the counter.
-        incr = yield self.batch_info_cache.add_to_addr("mybatch", "from-2")
+        incr = yield self.batch_info_cache.add_to_addr("mybatch", "addr-2")
         self.assertEqual(incr, 1)
         yield self.assert_redis_pfcount("batches:to_addr_hll:mybatch", 2)
 
         # Adding a previously-added address doesn't update the counter.
-        incr = yield self.batch_info_cache.add_to_addr("mybatch", "from-1")
+        incr = yield self.batch_info_cache.add_to_addr("mybatch", "addr-1")
         self.assertEqual(incr, 0)
         yield self.assert_redis_pfcount("batches:to_addr_hll:mybatch", 2)
 
@@ -984,6 +984,48 @@ class TestBatchInfoCache(VumiTestCase):
         The outbound message count returns zero for missing batches.
         """
         count = yield self.batch_info_cache.get_event_count("batch")
+        self.assertEqual(count, 0)
+
+    @inlineCallbacks
+    def test_get_from_addr_count(self):
+        """
+        The from_addr count can be queried.
+        """
+        yield self.batch_info_cache.batch_start("batch")
+        yield self.batch_info_cache.add_from_addr("batch", "addr-1")
+        yield self.batch_info_cache.add_from_addr("batch", "addr-2")
+        yield self.batch_info_cache.add_from_addr("batch", "addr-3")
+
+        count = yield self.batch_info_cache.get_from_addr_count("batch")
+        self.assertEqual(count, 3)
+
+    @inlineCallbacks
+    def test_get_from_addr_count_no_batch(self):
+        """
+        The from_addr count returns zero for missing batches.
+        """
+        count = yield self.batch_info_cache.get_from_addr_count("batch")
+        self.assertEqual(count, 0)
+
+    @inlineCallbacks
+    def test_get_to_addr_count(self):
+        """
+        The to_addr count can be queried.
+        """
+        yield self.batch_info_cache.batch_start("batch")
+        yield self.batch_info_cache.add_to_addr("batch", "addr-1")
+        yield self.batch_info_cache.add_to_addr("batch", "addr-2")
+        yield self.batch_info_cache.add_to_addr("batch", "addr-3")
+
+        count = yield self.batch_info_cache.get_to_addr_count("batch")
+        self.assertEqual(count, 3)
+
+    @inlineCallbacks
+    def test_get_to_addr_count_no_batch(self):
+        """
+        The to_addr count returns zero for missing batches.
+        """
+        count = yield self.batch_info_cache.get_to_addr_count("batch")
         self.assertEqual(count, 0)
 
     @inlineCallbacks

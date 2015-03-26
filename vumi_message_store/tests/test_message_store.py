@@ -1464,3 +1464,45 @@ class TestQueryMessageStore(VumiTestCase):
         """
         count = yield self.store.get_batch_event_count("batch")
         self.assertEqual(count, 0)
+
+    @inlineCallbacks
+    def test_get_batch_from_addr_count(self):
+        """
+        The from_addr count can be queried.
+        """
+        yield self.bi_cache.batch_start("batch")
+        yield self.bi_cache.add_from_addr("batch", "addr-1")
+        yield self.bi_cache.add_from_addr("batch", "addr-2")
+        yield self.bi_cache.add_from_addr("batch", "addr-3")
+
+        count = yield self.store.get_batch_from_addr_count("batch")
+        self.assertEqual(count, 3)
+
+    @inlineCallbacks
+    def test_get_batch_from_addr_count_no_batch(self):
+        """
+        The from_addr count returns zero for missing batches.
+        """
+        count = yield self.store.get_batch_from_addr_count("batch")
+        self.assertEqual(count, 0)
+
+    @inlineCallbacks
+    def test_get_batch_to_addr_count(self):
+        """
+        The to_addr count can be queried.
+        """
+        yield self.bi_cache.batch_start("batch")
+        yield self.bi_cache.add_to_addr("batch", "addr-1")
+        yield self.bi_cache.add_to_addr("batch", "addr-2")
+        yield self.bi_cache.add_to_addr("batch", "addr-3")
+
+        count = yield self.store.get_batch_to_addr_count("batch")
+        self.assertEqual(count, 3)
+
+    @inlineCallbacks
+    def test_get_batch_to_addr_count_no_batch(self):
+        """
+        The to_addr count returns zero for missing batches.
+        """
+        count = yield self.store.get_batch_to_addr_count("batch")
+        self.assertEqual(count, 0)

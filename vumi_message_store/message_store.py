@@ -263,3 +263,9 @@ class QueryMessageStore(object):
 
     def get_batch_event_count(self, batch_id):
         return self.batch_info_cache.get_event_count(batch_id)
+
+    def get_batch_from_addr_count(self, batch_id):
+        return self.batch_info_cache.get_from_addr_count(batch_id)
+
+    def get_batch_to_addr_count(self, batch_id):
+        return self.batch_info_cache.get_to_addr_count(batch_id)

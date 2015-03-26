@@ -335,6 +335,18 @@ class BatchInfoCache(object):
         """
         return self._get_counter_value(self.event_count_key(batch_id))
 
+    def get_from_addr_count(self, batch_id):
+        """
+        Return the count of from addresses.
+        """
+        return self.redis.pfcount(self.from_addr_key(batch_id))
+
+    def get_to_addr_count(self, batch_id):
+        """
+        Return the count of to addresses.
+        """
+        return self.redis.pfcount(self.to_addr_key(batch_id))
+
     @Manager.calls_manager
     def rebuild_cache(self, batch_id, qms, page_size=None):
         """
