@@ -2,24 +2,25 @@ language: python
 python:
   - "2.6"
   - "2.7"
+env:
+  # Test using Riak 1.4.
+  - RIAK_VERSION="1.4.12-1"
 matrix:
   include:
+    # Riak 2.0 sometimes doesn't have enough file descriptors:
+    # https://github.com/travis-ci/travis-ci/issues/3328
+    # Until that's fixed, don't build against new Riak.
+    # # Test against the Travis-provided version of Riak (currently 2.0.x).
+    # # This is a separate matrix inclusion to avoid spawning unnecessary builds.
+    # - python: "2.7"
+    #   env: RIAK_VERSION=current
     # Test on pypy without coverage, because it's unnecessary and very slow.
     - python: "pypy"
       env: NO_COVERAGE="1"
+
 before_install:
-  # We need Riak 1.4, so we add Basho's repo and install from there.
-  # Additionally, we remove existing Riak data and replace the config with ours.
-  - sudo service riak stop
-  - "curl http://apt.basho.com/gpg/basho.apt.key | sudo apt-key add -"
-  - sudo bash -c "echo deb http://apt.basho.com $(lsb_release -sc) main > /etc/apt/sources.list.d/basho.list"
-  - sudo apt-get -qq update
-  - sudo apt-get install -qq -y --force-yes riak=1.4.12-1
-  - sudo rm -rf /var/lib/riak/*
-  - sudo cp utils/app.config /etc/riak/app.config
-  - sudo service riak start
-  # we need the protobuf-compiler so we can install Riak client libraries
-  - sudo apt-get install -qq protobuf-compiler
+  # Set up an appropriate version of Riak.
+  - sudo utils/setup_travis_riak.sh "${RIAK_VERSION}"
 install:
   - "pip install -r requirements.txt"
   - "pip install coveralls"
