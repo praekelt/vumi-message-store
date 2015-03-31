@@ -2,6 +2,11 @@ language: python
 python:
   - "2.6"
   - "2.7"
+matrix:
+  include:
+    # Test on pypy without coverage, because it's unnecessary and very slow.
+    - python: "pypy"
+      env: NO_COVERAGE="1"
 before_install:
   # We need Riak 1.4, so we add Basho's repo and install from there.
   # Additionally, we remove existing Riak data and replace the config with ours.
@@ -16,14 +21,14 @@ before_install:
   # we need the protobuf-compiler so we can install Riak client libraries
   - sudo apt-get install -qq protobuf-compiler
 install:
-  - "pip install -r requirements.txt --use-wheel"
-  - "pip install coveralls --use-wheel"
-  - "pip install -e ."
+  - "pip install -r requirements.txt"
+  - "pip install coveralls"
 before_script:
   # To see what version of Riak we're running and check that it's happy.
   - riak version
   - riak-admin member-status
 script:
-  - coverage run --source=vumi_message_store `which trial` vumi_message_store
+  - if [ -z "$NO_COVERAGE" ]; then COVERAGE_CMD="coverage run --source=vumi_message_store"; else COVERAGE_CMD=""; fi
+  - $COVERAGE_CMD `which trial` vumi_message_store
 after_success:
-  - coveralls
+  - if [ -z "$NO_COVERAGE" ]; then coveralls; fi
