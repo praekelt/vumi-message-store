@@ -16,7 +16,7 @@ matrix:
     #   env: RIAK_VERSION=current
     # Test on pypy without coverage, because it's unnecessary and very slow.
     - python: "pypy"
-      env: NO_COVERAGE="1"
+      env: NO_COVERAGE="1" RIAK_VERSION="1.4.12-1"
 
 before_install:
   # Set up an appropriate version of Riak.
