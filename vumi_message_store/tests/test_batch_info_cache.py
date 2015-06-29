@@ -1037,6 +1037,7 @@ class TestBatchInfoCache(VumiTestCase):
         riak_persistence_helper = self.add_helper(
             PersistenceHelper(use_riak=True))
         manager = riak_persistence_helper.get_riak_manager()
+        self.add_cleanup(manager.close_manager)
         qms = QueryMessageStore(manager, self.redis)
         backend = qms.riak_backend
 
@@ -1129,6 +1130,7 @@ class TestBatchInfoCache(VumiTestCase):
         riak_persistence_helper = self.add_helper(
             PersistenceHelper(use_riak=True))
         manager = riak_persistence_helper.get_riak_manager()
+        self.add_cleanup(manager.close_manager)
         qms = QueryMessageStore(manager, self.redis)
         backend = qms.riak_backend
 
@@ -1208,6 +1210,7 @@ class TestBatchInfoCache(VumiTestCase):
         riak_persistence_helper = self.add_helper(
             PersistenceHelper(use_riak=True))
         manager = riak_persistence_helper.get_riak_manager()
+        self.add_cleanup(manager.close_manager)
         qms = QueryMessageStore(manager, self.redis)
 
         yield self.assert_redis_keys([])

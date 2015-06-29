@@ -33,6 +33,7 @@ class TestMessageStoreBatchManager(VumiTestCase):
         self.persistence_helper = self.add_helper(
             PersistenceHelper(use_riak=True))
         self.manager = self.persistence_helper.get_riak_manager()
+        self.add_cleanup(self.manager.close_manager)
         self.redis = yield self.persistence_helper.get_redis_manager()
         self.batch_manager = MessageStoreBatchManager(self.manager, self.redis)
         self.backend = self.batch_manager.riak_backend
@@ -180,6 +181,7 @@ class TestOperationalMessageStore(VumiTestCase):
         self.persistence_helper = self.add_helper(
             PersistenceHelper(use_riak=True))
         self.manager = self.persistence_helper.get_riak_manager()
+        self.add_cleanup(self.manager.close_manager)
         self.redis = yield self.persistence_helper.get_redis_manager()
         self.store = OperationalMessageStore(self.manager, self.redis)
         self.backend = self.store.riak_backend
@@ -650,6 +652,7 @@ class TestQueryMessageStore(VumiTestCase):
         self.persistence_helper = self.add_helper(
             PersistenceHelper(use_riak=True))
         self.manager = self.persistence_helper.get_riak_manager()
+        self.add_cleanup(self.manager.close_manager)
         self.redis = yield self.persistence_helper.get_redis_manager()
         self.store = QueryMessageStore(self.manager, self.redis)
         self.backend = self.store.riak_backend
