@@ -561,6 +561,7 @@ class TestEventMigrator(EventMigratorTestMixin, VumiTestCase):
         self.persistence_helper = self.add_helper(
             PersistenceHelper(use_riak=True))
         self.manager = self.persistence_helper.get_riak_manager()
+        self.add_cleanup(self.manager.close_manager)
         self.msg_helper = self.add_helper(MessageHelper())
         self.set_up_proxies()
 
@@ -571,6 +572,7 @@ class TestOutboundMessageMigrator(OutboundMessageMigratorTestMixin,
         self.persistence_helper = self.add_helper(
             PersistenceHelper(use_riak=True))
         self.manager = self.persistence_helper.get_riak_manager()
+        self.add_cleanup(self.manager.close_manager)
         self.msg_helper = self.add_helper(MessageHelper())
         self.set_up_proxies()
 
@@ -581,6 +583,7 @@ class TestInboundMessageMigrator(InboundMessageMigratorTestMixin,
         self.persistence_helper = self.add_helper(
             PersistenceHelper(use_riak=True))
         self.manager = self.persistence_helper.get_riak_manager()
+        self.add_cleanup(self.manager.close_manager)
         self.msg_helper = self.add_helper(MessageHelper())
         self.set_up_proxies()
 
