@@ -247,15 +247,6 @@ class TestOperationalMessageStore(VumiTestCase):
         batch_keys = yield self.bi_cache.list_inbound_message_keys("mybatch")
         self.assertEqual(set(batch_keys), set([msg["message_id"]]))
 
-        # Make sure we're writing the right indexes.
-        self.assertEqual(stored_msg._riak_object.get_indexes(), set([
-            ('batches_bin', "mybatch"),
-            ('batches_with_timestamps_bin',
-             "%s$%s" % ("mybatch", msg['timestamp'])),
-            ('batches_with_addresses_bin',
-             "%s$%s$%s" % ("mybatch", msg['timestamp'], msg['from_addr'])),
-        ]))
-
     @inlineCallbacks
     def test_add_inbound_message_with_multiple_batch_ids(self):
         """
@@ -278,20 +269,6 @@ class TestOperationalMessageStore(VumiTestCase):
         yourkeys = yield self.bi_cache.list_inbound_message_keys("yourbatch")
         self.assertEqual(yourkeys, [msg["message_id"]])
 
-        # Make sure we're writing the right indexes.
-        self.assertEqual(stored_msg._riak_object.get_indexes(), set([
-            ('batches_bin', "mybatch"),
-            ('batches_bin', "yourbatch"),
-            ('batches_with_timestamps_bin',
-             "%s$%s" % ("mybatch", msg['timestamp'])),
-            ('batches_with_timestamps_bin',
-             "%s$%s" % ("yourbatch", msg['timestamp'])),
-            ('batches_with_addresses_bin',
-             "%s$%s$%s" % ("mybatch", msg['timestamp'], msg['from_addr'])),
-            ('batches_with_addresses_bin',
-             "%s$%s$%s" % ("yourbatch", msg['timestamp'], msg['from_addr'])),
-        ]))
-
     @inlineCallbacks
     def test_add_inbound_message_to_new_batch(self):
         """
@@ -312,20 +289,6 @@ class TestOperationalMessageStore(VumiTestCase):
         self.assertEqual(mykeys, [msg["message_id"]])
         yourkeys = yield self.bi_cache.list_inbound_message_keys("yourbatch")
         self.assertEqual(yourkeys, [msg["message_id"]])
-
-        # Make sure we're writing the right indexes.
-        self.assertEqual(stored_msg._riak_object.get_indexes(), set([
-            ('batches_bin', "mybatch"),
-            ('batches_bin', "yourbatch"),
-            ('batches_with_timestamps_bin',
-             "%s$%s" % ("mybatch", msg['timestamp'])),
-            ('batches_with_timestamps_bin',
-             "%s$%s" % ("yourbatch", msg['timestamp'])),
-            ('batches_with_addresses_bin',
-             "%s$%s$%s" % ("mybatch", msg['timestamp'], msg['from_addr'])),
-            ('batches_with_addresses_bin',
-             "%s$%s$%s" % ("yourbatch", msg['timestamp'], msg['from_addr'])),
-        ]))
 
     @inlineCallbacks
     def test_get_inbound_message(self):
@@ -398,15 +361,6 @@ class TestOperationalMessageStore(VumiTestCase):
         batch_keys = yield self.bi_cache.list_outbound_message_keys("mybatch")
         self.assertEqual(batch_keys, [msg["message_id"]])
 
-        # Make sure we're writing the right indexes.
-        self.assertEqual(stored_msg._riak_object.get_indexes(), set([
-            ('batches_bin', "mybatch"),
-            ('batches_with_timestamps_bin',
-             "%s$%s" % ("mybatch", msg['timestamp'])),
-            ('batches_with_addresses_bin',
-             "%s$%s$%s" % ("mybatch", msg['timestamp'], msg['to_addr'])),
-        ]))
-
     @inlineCallbacks
     def test_add_outbound_message_with_multiple_batch_ids(self):
         """
@@ -429,20 +383,6 @@ class TestOperationalMessageStore(VumiTestCase):
         yourkeys = yield self.bi_cache.list_outbound_message_keys("yourbatch")
         self.assertEqual(yourkeys, [msg["message_id"]])
 
-        # Make sure we're writing the right indexes.
-        self.assertEqual(stored_msg._riak_object.get_indexes(), set([
-            ('batches_bin', "mybatch"),
-            ('batches_bin', "yourbatch"),
-            ('batches_with_timestamps_bin',
-             "%s$%s" % ("mybatch", msg['timestamp'])),
-            ('batches_with_timestamps_bin',
-             "%s$%s" % ("yourbatch", msg['timestamp'])),
-            ('batches_with_addresses_bin',
-             "%s$%s$%s" % ("mybatch", msg['timestamp'], msg['to_addr'])),
-            ('batches_with_addresses_bin',
-             "%s$%s$%s" % ("yourbatch", msg['timestamp'], msg['to_addr'])),
-        ]))
-
     @inlineCallbacks
     def test_add_outbound_message_to_new_batch(self):
         """
@@ -463,20 +403,6 @@ class TestOperationalMessageStore(VumiTestCase):
         self.assertEqual(mykeys, [msg["message_id"]])
         yourkeys = yield self.bi_cache.list_outbound_message_keys("yourbatch")
         self.assertEqual(yourkeys, [msg["message_id"]])
-
-        # Make sure we're writing the right indexes.
-        self.assertEqual(stored_msg._riak_object.get_indexes(), set([
-            ('batches_bin', "mybatch"),
-            ('batches_bin', "yourbatch"),
-            ('batches_with_timestamps_bin',
-             "%s$%s" % ("mybatch", msg['timestamp'])),
-            ('batches_with_timestamps_bin',
-             "%s$%s" % ("yourbatch", msg['timestamp'])),
-            ('batches_with_addresses_bin',
-             "%s$%s$%s" % ("mybatch", msg['timestamp'], msg['to_addr'])),
-            ('batches_with_addresses_bin',
-             "%s$%s$%s" % ("yourbatch", msg['timestamp'], msg['to_addr'])),
-        ]))
 
     @inlineCallbacks
     def test_get_outbound_message(self):

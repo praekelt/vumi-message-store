@@ -169,6 +169,10 @@ class FakeRiakState(object):
         for index_name, index_value in fake_object._current_data["indexes"]:
             indexes.setdefault(index_name, []).append(
                 (index_value, fake_object.key))
+
+        bucket["indexes"] = self._filter_old_indexes(
+            fake_object, bucket["indexes"])
+
         for index_name, index_values in indexes.iteritems():
             old_indexes = bucket["indexes"].get(index_name, [])
             new_indexes = [
@@ -177,6 +181,18 @@ class FakeRiakState(object):
             new_indexes.extend(index_values)
             new_indexes.sort()
             bucket["indexes"][index_name] = new_indexes
+
+    def _filter_old_indexes(self, fake_object, global_indexes):
+        """
+        Remove the object's key from indexes it no longer specifies
+        """
+        filtered_indexes = {}
+        for index_name, index_data in global_indexes.iteritems():
+            if index_name not in fake_object._current_data["indexes"]:
+                index_data = list(filter(
+                    lambda (_, key): key != fake_object.key, index_data))
+            filtered_indexes[index_name] = index_data
+        return filtered_indexes
 
     def _reload_object_state(self, fake_object):
         """

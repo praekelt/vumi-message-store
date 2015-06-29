@@ -7,21 +7,15 @@ Tests for vumi_message_store.riak_backend.
 from datetime import datetime, timedelta
 
 from twisted.internet.defer import inlineCallbacks
-from vumi.message import VUMI_DATE_FORMAT
+from vumi.message import format_vumi_date
 from vumi.tests.helpers import MessageHelper, VumiTestCase, PersistenceHelper
 
 from vumi_message_store.memory_backend_manager import (
     FakeRiakState, FakeMemoryRiakManager)
 from vumi_message_store.models import (
+    to_reverse_timestamp,
     Batch, CurrentTag, InboundMessage, OutboundMessage, Event)
 from vumi_message_store.riak_backend import MessageStoreRiakBackend
-
-
-def vumi_date(timestamp):
-    """
-    Turn a datetime object into a VUMI_DATE_FORMAT string.
-    """
-    return datetime.strftime(timestamp, VUMI_DATE_FORMAT)
 
 
 class RiakBackendTestMixin(object):
@@ -200,12 +194,14 @@ class RiakBackendTestMixin(object):
         self.assertEqual(stored_msg.batches.keys(), ["mybatch"])
 
         # Make sure we're writing the right indexes.
+        timestamp = format_vumi_date(msg['timestamp'])
+        reverse_ts = to_reverse_timestamp(timestamp)
         self.assertEqual(stored_msg._riak_object.get_indexes(), set([
             ('batches_bin', "mybatch"),
-            ('batches_with_timestamps_bin',
-             "%s$%s" % ("mybatch", msg['timestamp'])),
             ('batches_with_addresses_bin',
-             "%s$%s$%s" % ("mybatch", msg['timestamp'], msg['from_addr'])),
+             "%s$%s$%s" % ("mybatch", timestamp, msg['from_addr'])),
+            ('batches_with_addresses_reverse_bin',
+             "%s$%s$%s" % ("mybatch", reverse_ts, msg['from_addr'])),
         ]))
 
     @inlineCallbacks
@@ -224,17 +220,19 @@ class RiakBackendTestMixin(object):
             sorted(stored_msg.batches.keys()), ["mybatch", "yourbatch"])
 
         # Make sure we're writing the right indexes.
+        timestamp = format_vumi_date(msg['timestamp'])
+        reverse_ts = to_reverse_timestamp(timestamp)
         self.assertEqual(stored_msg._riak_object.get_indexes(), set([
             ('batches_bin', "mybatch"),
             ('batches_bin', "yourbatch"),
-            ('batches_with_timestamps_bin',
-             "%s$%s" % ("mybatch", msg['timestamp'])),
-            ('batches_with_timestamps_bin',
-             "%s$%s" % ("yourbatch", msg['timestamp'])),
             ('batches_with_addresses_bin',
-             "%s$%s$%s" % ("mybatch", msg['timestamp'], msg['from_addr'])),
+             "%s$%s$%s" % ("mybatch", timestamp, msg['from_addr'])),
             ('batches_with_addresses_bin',
-             "%s$%s$%s" % ("yourbatch", msg['timestamp'], msg['from_addr'])),
+             "%s$%s$%s" % ("yourbatch", timestamp, msg['from_addr'])),
+            ('batches_with_addresses_reverse_bin',
+             "%s$%s$%s" % ("mybatch", reverse_ts, msg['from_addr'])),
+            ('batches_with_addresses_reverse_bin',
+             "%s$%s$%s" % ("yourbatch", reverse_ts, msg['from_addr'])),
         ]))
 
     @inlineCallbacks
@@ -253,17 +251,19 @@ class RiakBackendTestMixin(object):
             sorted(stored_msg.batches.keys()), ["mybatch", "yourbatch"])
 
         # Make sure we're writing the right indexes.
+        timestamp = format_vumi_date(msg['timestamp'])
+        reverse_ts = to_reverse_timestamp(timestamp)
         self.assertEqual(stored_msg._riak_object.get_indexes(), set([
             ('batches_bin', "mybatch"),
             ('batches_bin', "yourbatch"),
-            ('batches_with_timestamps_bin',
-             "%s$%s" % ("mybatch", msg['timestamp'])),
-            ('batches_with_timestamps_bin',
-             "%s$%s" % ("yourbatch", msg['timestamp'])),
             ('batches_with_addresses_bin',
-             "%s$%s$%s" % ("mybatch", msg['timestamp'], msg['from_addr'])),
+             "%s$%s$%s" % ("mybatch", timestamp, msg['from_addr'])),
             ('batches_with_addresses_bin',
-             "%s$%s$%s" % ("yourbatch", msg['timestamp'], msg['from_addr'])),
+             "%s$%s$%s" % ("yourbatch", timestamp, msg['from_addr'])),
+            ('batches_with_addresses_reverse_bin',
+             "%s$%s$%s" % ("mybatch", reverse_ts, msg['from_addr'])),
+            ('batches_with_addresses_reverse_bin',
+             "%s$%s$%s" % ("yourbatch", reverse_ts, msg['from_addr'])),
         ]))
 
     @inlineCallbacks
@@ -363,12 +363,14 @@ class RiakBackendTestMixin(object):
         self.assertEqual(stored_msg.batches.keys(), ["mybatch"])
 
         # Make sure we're writing the right indexes.
+        timestamp = format_vumi_date(msg['timestamp'])
+        reverse_ts = to_reverse_timestamp(timestamp)
         self.assertEqual(stored_msg._riak_object.get_indexes(), set([
             ('batches_bin', "mybatch"),
-            ('batches_with_timestamps_bin',
-             "%s$%s" % ("mybatch", msg['timestamp'])),
             ('batches_with_addresses_bin',
-             "%s$%s$%s" % ("mybatch", msg['timestamp'], msg['to_addr'])),
+             "%s$%s$%s" % ("mybatch", timestamp, msg['to_addr'])),
+            ('batches_with_addresses_reverse_bin',
+             "%s$%s$%s" % ("mybatch", reverse_ts, msg['to_addr'])),
         ]))
 
     @inlineCallbacks
@@ -387,17 +389,19 @@ class RiakBackendTestMixin(object):
             sorted(stored_msg.batches.keys()), ["mybatch", "yourbatch"])
 
         # Make sure we're writing the right indexes.
+        timestamp = format_vumi_date(msg['timestamp'])
+        reverse_ts = to_reverse_timestamp(timestamp)
         self.assertEqual(stored_msg._riak_object.get_indexes(), set([
             ('batches_bin', "mybatch"),
             ('batches_bin', "yourbatch"),
-            ('batches_with_timestamps_bin',
-             "%s$%s" % ("mybatch", msg['timestamp'])),
-            ('batches_with_timestamps_bin',
-             "%s$%s" % ("yourbatch", msg['timestamp'])),
             ('batches_with_addresses_bin',
-             "%s$%s$%s" % ("mybatch", msg['timestamp'], msg['to_addr'])),
+             "%s$%s$%s" % ("mybatch", timestamp, msg['to_addr'])),
             ('batches_with_addresses_bin',
-             "%s$%s$%s" % ("yourbatch", msg['timestamp'], msg['to_addr'])),
+             "%s$%s$%s" % ("yourbatch", timestamp, msg['to_addr'])),
+            ('batches_with_addresses_reverse_bin',
+             "%s$%s$%s" % ("mybatch", reverse_ts, msg['to_addr'])),
+            ('batches_with_addresses_reverse_bin',
+             "%s$%s$%s" % ("yourbatch", reverse_ts, msg['to_addr'])),
         ]))
 
     @inlineCallbacks
@@ -416,17 +420,19 @@ class RiakBackendTestMixin(object):
             sorted(stored_msg.batches.keys()), ["mybatch", "yourbatch"])
 
         # Make sure we're writing the right indexes.
+        timestamp = format_vumi_date(msg['timestamp'])
+        reverse_ts = to_reverse_timestamp(timestamp)
         self.assertEqual(stored_msg._riak_object.get_indexes(), set([
             ('batches_bin', "mybatch"),
             ('batches_bin', "yourbatch"),
-            ('batches_with_timestamps_bin',
-             "%s$%s" % ("mybatch", msg['timestamp'])),
-            ('batches_with_timestamps_bin',
-             "%s$%s" % ("yourbatch", msg['timestamp'])),
             ('batches_with_addresses_bin',
-             "%s$%s$%s" % ("mybatch", msg['timestamp'], msg['to_addr'])),
+             "%s$%s$%s" % ("mybatch", timestamp, msg['to_addr'])),
             ('batches_with_addresses_bin',
-             "%s$%s$%s" % ("yourbatch", msg['timestamp'], msg['to_addr'])),
+             "%s$%s$%s" % ("yourbatch", timestamp, msg['to_addr'])),
+            ('batches_with_addresses_reverse_bin',
+             "%s$%s$%s" % ("mybatch", reverse_ts, msg['to_addr'])),
+            ('batches_with_addresses_reverse_bin',
+             "%s$%s$%s" % ("yourbatch", reverse_ts, msg['to_addr'])),
         ]))
 
     @inlineCallbacks
@@ -715,7 +721,7 @@ class RiakBackendTestMixin(object):
             msg = self.msg_helper.make_inbound(
                 "Message %s" % (i,), timestamp=timestamp)
             yield self.backend.add_inbound_message(msg, batch_ids=[batch_id])
-            all_keys.append((msg["message_id"], vumi_date(timestamp)))
+            all_keys.append((msg["message_id"], format_vumi_date(timestamp)))
 
         keys_p1 = yield self.backend.list_batch_inbound_keys_with_timestamps(
             batch_id, max_results=3)
@@ -739,7 +745,7 @@ class RiakBackendTestMixin(object):
             msg = self.msg_helper.make_inbound(
                 "Message %s" % (i,), timestamp=timestamp)
             yield self.backend.add_inbound_message(msg, batch_ids=[batch_id])
-            all_keys.append((msg["message_id"], vumi_date(timestamp)))
+            all_keys.append((msg["message_id"], format_vumi_date(timestamp)))
 
         keys_p1 = yield self.backend.list_batch_inbound_keys_with_timestamps(
             batch_id, start=all_keys[1][1], max_results=3)
@@ -763,7 +769,7 @@ class RiakBackendTestMixin(object):
             msg = self.msg_helper.make_inbound(
                 "Message %s" % (i,), timestamp=timestamp)
             yield self.backend.add_inbound_message(msg, batch_ids=[batch_id])
-            all_keys.append((msg["message_id"], vumi_date(timestamp)))
+            all_keys.append((msg["message_id"], format_vumi_date(timestamp)))
 
         keys_p1 = yield self.backend.list_batch_inbound_keys_with_timestamps(
             batch_id, end=all_keys[-2][1], max_results=3)
@@ -787,7 +793,7 @@ class RiakBackendTestMixin(object):
             msg = self.msg_helper.make_inbound(
                 "Message %s" % (i,), timestamp=timestamp)
             yield self.backend.add_inbound_message(msg, batch_ids=[batch_id])
-            all_keys.append((msg["message_id"], vumi_date(timestamp)))
+            all_keys.append((msg["message_id"], format_vumi_date(timestamp)))
 
         keys_p1 = yield self.backend.list_batch_inbound_keys_with_timestamps(
             batch_id, start=all_keys[1][1], end=all_keys[-2][1], max_results=2)
@@ -823,7 +829,7 @@ class RiakBackendTestMixin(object):
             msg = self.msg_helper.make_outbound(
                 "Message %s" % (i,), timestamp=timestamp)
             yield self.backend.add_outbound_message(msg, batch_ids=[batch_id])
-            all_keys.append((msg["message_id"], vumi_date(timestamp)))
+            all_keys.append((msg["message_id"], format_vumi_date(timestamp)))
 
         keys_p1 = yield self.backend.list_batch_outbound_keys_with_timestamps(
             batch_id, max_results=3)
@@ -847,7 +853,7 @@ class RiakBackendTestMixin(object):
             msg = self.msg_helper.make_outbound(
                 "Message %s" % (i,), timestamp=timestamp)
             yield self.backend.add_outbound_message(msg, batch_ids=[batch_id])
-            all_keys.append((msg["message_id"], vumi_date(timestamp)))
+            all_keys.append((msg["message_id"], format_vumi_date(timestamp)))
 
         keys_p1 = yield self.backend.list_batch_outbound_keys_with_timestamps(
             batch_id, start=all_keys[1][1], max_results=3)
@@ -871,7 +877,7 @@ class RiakBackendTestMixin(object):
             msg = self.msg_helper.make_outbound(
                 "Message %s" % (i,), timestamp=timestamp)
             yield self.backend.add_outbound_message(msg, batch_ids=[batch_id])
-            all_keys.append((msg["message_id"], vumi_date(timestamp)))
+            all_keys.append((msg["message_id"], format_vumi_date(timestamp)))
 
         keys_p1 = yield self.backend.list_batch_outbound_keys_with_timestamps(
             batch_id, end=all_keys[-2][1], max_results=3)
@@ -895,7 +901,7 @@ class RiakBackendTestMixin(object):
             msg = self.msg_helper.make_outbound(
                 "Message %s" % (i,), timestamp=timestamp)
             yield self.backend.add_outbound_message(msg, batch_ids=[batch_id])
-            all_keys.append((msg["message_id"], vumi_date(timestamp)))
+            all_keys.append((msg["message_id"], format_vumi_date(timestamp)))
 
         keys_p1 = yield self.backend.list_batch_outbound_keys_with_timestamps(
             batch_id, start=all_keys[1][1], end=all_keys[-2][1], max_results=2)
@@ -933,7 +939,7 @@ class RiakBackendTestMixin(object):
                 "Message %s" % (i,), timestamp=timestamp, from_addr=addr)
             yield self.backend.add_inbound_message(msg, batch_ids=[batch_id])
             all_keys.append(
-                (msg["message_id"], vumi_date(timestamp), addr))
+                (msg["message_id"], format_vumi_date(timestamp), addr))
 
         keys_p1 = yield self.backend.list_batch_inbound_keys_with_addresses(
             batch_id, max_results=3)
@@ -959,7 +965,7 @@ class RiakBackendTestMixin(object):
                 "Message %s" % (i,), timestamp=timestamp, from_addr=addr)
             yield self.backend.add_inbound_message(msg, batch_ids=[batch_id])
             all_keys.append(
-                (msg["message_id"], vumi_date(timestamp), addr))
+                (msg["message_id"], format_vumi_date(timestamp), addr))
 
         keys_p1 = yield self.backend.list_batch_inbound_keys_with_addresses(
             batch_id, start=all_keys[1][1], max_results=3)
@@ -985,7 +991,7 @@ class RiakBackendTestMixin(object):
                 "Message %s" % (i,), timestamp=timestamp, from_addr=addr)
             yield self.backend.add_inbound_message(msg, batch_ids=[batch_id])
             all_keys.append(
-                (msg["message_id"], vumi_date(timestamp), addr))
+                (msg["message_id"], format_vumi_date(timestamp), addr))
 
         keys_p1 = yield self.backend.list_batch_inbound_keys_with_addresses(
             batch_id, end=all_keys[-2][1], max_results=3)
@@ -1011,7 +1017,7 @@ class RiakBackendTestMixin(object):
                 "Message %s" % (i,), timestamp=timestamp, from_addr=addr)
             yield self.backend.add_inbound_message(msg, batch_ids=[batch_id])
             all_keys.append(
-                (msg["message_id"], vumi_date(timestamp), addr))
+                (msg["message_id"], format_vumi_date(timestamp), addr))
 
         keys_p1 = yield self.backend.list_batch_inbound_keys_with_addresses(
             batch_id, start=all_keys[1][1], end=all_keys[-2][1], max_results=2)
@@ -1049,7 +1055,7 @@ class RiakBackendTestMixin(object):
                 "Message %s" % (i,), timestamp=timestamp, to_addr=addr)
             yield self.backend.add_outbound_message(msg, batch_ids=[batch_id])
             all_keys.append(
-                (msg["message_id"], vumi_date(timestamp), addr))
+                (msg["message_id"], format_vumi_date(timestamp), addr))
 
         keys_p1 = yield self.backend.list_batch_outbound_keys_with_addresses(
             batch_id, max_results=3)
@@ -1075,7 +1081,7 @@ class RiakBackendTestMixin(object):
                 "Message %s" % (i,), timestamp=timestamp, to_addr=addr)
             yield self.backend.add_outbound_message(msg, batch_ids=[batch_id])
             all_keys.append(
-                (msg["message_id"], vumi_date(timestamp), addr))
+                (msg["message_id"], format_vumi_date(timestamp), addr))
 
         keys_p1 = yield self.backend.list_batch_outbound_keys_with_addresses(
             batch_id, start=all_keys[1][1], max_results=3)
@@ -1101,7 +1107,7 @@ class RiakBackendTestMixin(object):
                 "Message %s" % (i,), timestamp=timestamp, to_addr=addr)
             yield self.backend.add_outbound_message(msg, batch_ids=[batch_id])
             all_keys.append(
-                (msg["message_id"], vumi_date(timestamp), addr))
+                (msg["message_id"], format_vumi_date(timestamp), addr))
 
         keys_p1 = yield self.backend.list_batch_outbound_keys_with_addresses(
             batch_id, end=all_keys[-2][1], max_results=3)
@@ -1127,7 +1133,7 @@ class RiakBackendTestMixin(object):
                 "Message %s" % (i,), timestamp=timestamp, to_addr=addr)
             yield self.backend.add_outbound_message(msg, batch_ids=[batch_id])
             all_keys.append(
-                (msg["message_id"], vumi_date(timestamp), addr))
+                (msg["message_id"], format_vumi_date(timestamp), addr))
 
         keys_p1 = yield self.backend.list_batch_outbound_keys_with_addresses(
             batch_id, start=all_keys[1][1], end=all_keys[-2][1], max_results=2)
@@ -1171,11 +1177,12 @@ class RiakBackendTestMixin(object):
             self.msg_helper.make_delivery_report(
                 msg, timestamp=(start + timedelta(seconds=4))),
         ]
-        all_keys = [(ack["event_id"], vumi_date(ack["timestamp"]), "ack")]
+        all_keys = [(ack["event_id"],
+                    format_vumi_date(ack["timestamp"]), "ack")]
         for dr in drs:
             yield self.backend.add_event(dr)
             all_keys.append(
-                (dr["event_id"], vumi_date(dr["timestamp"]),
+                (dr["event_id"], format_vumi_date(dr["timestamp"]),
                  "delivery_report.delivered"))
 
         keys_p1 = yield self.backend.list_message_event_keys_with_statuses(
