@@ -119,7 +119,7 @@ class InboundMessageMigrator(MessageMigratorBase):
 
     def reverse_from_3(self, mdata):
         # The only difference between v2 and v3 is an index that's computed at
-        # save time, to the reverse migration is identical to the forward
+        # save time, so the reverse migration is identical to the forward
         # migration except for the version we set.
         mdata.set_value('$VERSION', 2)
         self._copy_msg_field('msg', mdata)
