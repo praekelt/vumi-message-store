@@ -4,7 +4,7 @@ Tests for vumi_message_store.message_store.
 from datetime import datetime, timedelta
 
 from twisted.internet.defer import inlineCallbacks
-from vumi.message import VUMI_DATE_FORMAT
+from vumi.message import format_vumi_date
 from vumi.tests.helpers import VumiTestCase, MessageHelper, PersistenceHelper
 from zope.interface.verify import verifyObject
 
@@ -13,13 +13,6 @@ from vumi_message_store.interfaces import (
     IMessageStoreBatchManager, IOperationalMessageStore, IQueryMessageStore)
 from vumi_message_store.message_store import (
     MessageStoreBatchManager, OperationalMessageStore, QueryMessageStore)
-
-
-def vumi_date(timestamp):
-    """
-    Turn a datetime object into a VUMI_DATE_FORMAT string.
-    """
-    return datetime.strftime(timestamp, VUMI_DATE_FORMAT)
 
 
 # TODO: Better way to test indexes. Currently indexes are retrieved
@@ -741,7 +734,7 @@ class TestQueryMessageStore(VumiTestCase):
             msg = self.msg_helper.make_inbound(
                 "Message %s" % (i,), timestamp=timestamp)
             yield self.backend.add_inbound_message(msg, batch_ids=[batch_id])
-            all_keys.append((msg["message_id"], vumi_date(timestamp)))
+            all_keys.append((msg["message_id"], format_vumi_date(timestamp)))
 
         keys_p1 = yield self.store.list_batch_inbound_keys_with_timestamps(
             batch_id, max_results=3)
@@ -765,7 +758,7 @@ class TestQueryMessageStore(VumiTestCase):
             msg = self.msg_helper.make_inbound(
                 "Message %s" % (i,), timestamp=timestamp)
             yield self.backend.add_inbound_message(msg, batch_ids=[batch_id])
-            all_keys.append((msg["message_id"], vumi_date(timestamp)))
+            all_keys.append((msg["message_id"], format_vumi_date(timestamp)))
 
         keys_p1 = yield self.store.list_batch_inbound_keys_with_timestamps(
             batch_id, start=all_keys[1][1], max_results=3)
@@ -789,7 +782,7 @@ class TestQueryMessageStore(VumiTestCase):
             msg = self.msg_helper.make_inbound(
                 "Message %s" % (i,), timestamp=timestamp)
             yield self.backend.add_inbound_message(msg, batch_ids=[batch_id])
-            all_keys.append((msg["message_id"], vumi_date(timestamp)))
+            all_keys.append((msg["message_id"], format_vumi_date(timestamp)))
 
         keys_p1 = yield self.store.list_batch_inbound_keys_with_timestamps(
             batch_id, end=all_keys[-2][1], max_results=3)
@@ -813,7 +806,7 @@ class TestQueryMessageStore(VumiTestCase):
             msg = self.msg_helper.make_inbound(
                 "Message %s" % (i,), timestamp=timestamp)
             yield self.backend.add_inbound_message(msg, batch_ids=[batch_id])
-            all_keys.append((msg["message_id"], vumi_date(timestamp)))
+            all_keys.append((msg["message_id"], format_vumi_date(timestamp)))
 
         keys_p1 = yield self.store.list_batch_inbound_keys_with_timestamps(
             batch_id, start=all_keys[1][1], end=all_keys[-2][1], max_results=2)
@@ -849,7 +842,7 @@ class TestQueryMessageStore(VumiTestCase):
             msg = self.msg_helper.make_outbound(
                 "Message %s" % (i,), timestamp=timestamp)
             yield self.backend.add_outbound_message(msg, batch_ids=[batch_id])
-            all_keys.append((msg["message_id"], vumi_date(timestamp)))
+            all_keys.append((msg["message_id"], format_vumi_date(timestamp)))
 
         keys_p1 = yield self.store.list_batch_outbound_keys_with_timestamps(
             batch_id, max_results=3)
@@ -873,7 +866,7 @@ class TestQueryMessageStore(VumiTestCase):
             msg = self.msg_helper.make_outbound(
                 "Message %s" % (i,), timestamp=timestamp)
             yield self.backend.add_outbound_message(msg, batch_ids=[batch_id])
-            all_keys.append((msg["message_id"], vumi_date(timestamp)))
+            all_keys.append((msg["message_id"], format_vumi_date(timestamp)))
 
         keys_p1 = yield self.store.list_batch_outbound_keys_with_timestamps(
             batch_id, start=all_keys[1][1], max_results=3)
@@ -897,7 +890,7 @@ class TestQueryMessageStore(VumiTestCase):
             msg = self.msg_helper.make_outbound(
                 "Message %s" % (i,), timestamp=timestamp)
             yield self.backend.add_outbound_message(msg, batch_ids=[batch_id])
-            all_keys.append((msg["message_id"], vumi_date(timestamp)))
+            all_keys.append((msg["message_id"], format_vumi_date(timestamp)))
 
         keys_p1 = yield self.store.list_batch_outbound_keys_with_timestamps(
             batch_id, end=all_keys[-2][1], max_results=3)
@@ -921,7 +914,7 @@ class TestQueryMessageStore(VumiTestCase):
             msg = self.msg_helper.make_outbound(
                 "Message %s" % (i,), timestamp=timestamp)
             yield self.backend.add_outbound_message(msg, batch_ids=[batch_id])
-            all_keys.append((msg["message_id"], vumi_date(timestamp)))
+            all_keys.append((msg["message_id"], format_vumi_date(timestamp)))
 
         keys_p1 = yield self.store.list_batch_outbound_keys_with_timestamps(
             batch_id, start=all_keys[1][1], end=all_keys[-2][1], max_results=2)
@@ -959,7 +952,7 @@ class TestQueryMessageStore(VumiTestCase):
                 "Message %s" % (i,), timestamp=timestamp, from_addr=addr)
             yield self.backend.add_inbound_message(msg, batch_ids=[batch_id])
             all_keys.append(
-                (msg["message_id"], vumi_date(timestamp), addr))
+                (msg["message_id"], format_vumi_date(timestamp), addr))
 
         keys_p1 = yield self.store.list_batch_inbound_keys_with_addresses(
             batch_id, max_results=3)
@@ -985,7 +978,7 @@ class TestQueryMessageStore(VumiTestCase):
                 "Message %s" % (i,), timestamp=timestamp, from_addr=addr)
             yield self.backend.add_inbound_message(msg, batch_ids=[batch_id])
             all_keys.append(
-                (msg["message_id"], vumi_date(timestamp), addr))
+                (msg["message_id"], format_vumi_date(timestamp), addr))
 
         keys_p1 = yield self.store.list_batch_inbound_keys_with_addresses(
             batch_id, start=all_keys[1][1], max_results=3)
@@ -1011,7 +1004,7 @@ class TestQueryMessageStore(VumiTestCase):
                 "Message %s" % (i,), timestamp=timestamp, from_addr=addr)
             yield self.backend.add_inbound_message(msg, batch_ids=[batch_id])
             all_keys.append(
-                (msg["message_id"], vumi_date(timestamp), addr))
+                (msg["message_id"], format_vumi_date(timestamp), addr))
 
         keys_p1 = yield self.store.list_batch_inbound_keys_with_addresses(
             batch_id, end=all_keys[-2][1], max_results=3)
@@ -1037,7 +1030,7 @@ class TestQueryMessageStore(VumiTestCase):
                 "Message %s" % (i,), timestamp=timestamp, from_addr=addr)
             yield self.backend.add_inbound_message(msg, batch_ids=[batch_id])
             all_keys.append(
-                (msg["message_id"], vumi_date(timestamp), addr))
+                (msg["message_id"], format_vumi_date(timestamp), addr))
 
         keys_p1 = yield self.store.list_batch_inbound_keys_with_addresses(
             batch_id, start=all_keys[1][1], end=all_keys[-2][1], max_results=2)
@@ -1075,7 +1068,7 @@ class TestQueryMessageStore(VumiTestCase):
                 "Message %s" % (i,), timestamp=timestamp, to_addr=addr)
             yield self.backend.add_outbound_message(msg, batch_ids=[batch_id])
             all_keys.append(
-                (msg["message_id"], vumi_date(timestamp), addr))
+                (msg["message_id"], format_vumi_date(timestamp), addr))
 
         keys_p1 = yield self.store.list_batch_outbound_keys_with_addresses(
             batch_id, max_results=3)
@@ -1101,7 +1094,7 @@ class TestQueryMessageStore(VumiTestCase):
                 "Message %s" % (i,), timestamp=timestamp, to_addr=addr)
             yield self.backend.add_outbound_message(msg, batch_ids=[batch_id])
             all_keys.append(
-                (msg["message_id"], vumi_date(timestamp), addr))
+                (msg["message_id"], format_vumi_date(timestamp), addr))
 
         keys_p1 = yield self.store.list_batch_outbound_keys_with_addresses(
             batch_id, start=all_keys[1][1], max_results=3)
@@ -1127,7 +1120,7 @@ class TestQueryMessageStore(VumiTestCase):
                 "Message %s" % (i,), timestamp=timestamp, to_addr=addr)
             yield self.backend.add_outbound_message(msg, batch_ids=[batch_id])
             all_keys.append(
-                (msg["message_id"], vumi_date(timestamp), addr))
+                (msg["message_id"], format_vumi_date(timestamp), addr))
 
         keys_p1 = yield self.store.list_batch_outbound_keys_with_addresses(
             batch_id, end=all_keys[-2][1], max_results=3)
@@ -1153,7 +1146,7 @@ class TestQueryMessageStore(VumiTestCase):
                 "Message %s" % (i,), timestamp=timestamp, to_addr=addr)
             yield self.backend.add_outbound_message(msg, batch_ids=[batch_id])
             all_keys.append(
-                (msg["message_id"], vumi_date(timestamp), addr))
+                (msg["message_id"], format_vumi_date(timestamp), addr))
 
         keys_p1 = yield self.store.list_batch_outbound_keys_with_addresses(
             batch_id, start=all_keys[1][1], end=all_keys[-2][1], max_results=2)
@@ -1192,7 +1185,7 @@ class TestQueryMessageStore(VumiTestCase):
                 "Message %s" % (i,), timestamp=timestamp, from_addr=addr)
             yield self.backend.add_inbound_message(msg, batch_ids=[batch_id])
             all_keys.append(
-                (msg["message_id"], vumi_date(timestamp), addr))
+                (msg["message_id"], format_vumi_date(timestamp), addr))
 
         keys_p1 = (
             yield self.store.list_batch_inbound_keys_with_addresses_reverse(
@@ -1220,7 +1213,7 @@ class TestQueryMessageStore(VumiTestCase):
                 "Message %s" % (i,), timestamp=timestamp, from_addr=addr)
             yield self.backend.add_inbound_message(msg, batch_ids=[batch_id])
             all_keys.append(
-                (msg["message_id"], vumi_date(timestamp), addr))
+                (msg["message_id"], format_vumi_date(timestamp), addr))
 
         keys_p1 = (
             yield self.store.list_batch_inbound_keys_with_addresses_reverse(
@@ -1248,7 +1241,7 @@ class TestQueryMessageStore(VumiTestCase):
                 "Message %s" % (i,), timestamp=timestamp, from_addr=addr)
             yield self.backend.add_inbound_message(msg, batch_ids=[batch_id])
             all_keys.append(
-                (msg["message_id"], vumi_date(timestamp), addr))
+                (msg["message_id"], format_vumi_date(timestamp), addr))
 
         keys_p1 = (
             yield self.store.list_batch_inbound_keys_with_addresses_reverse(
@@ -1276,7 +1269,7 @@ class TestQueryMessageStore(VumiTestCase):
                 "Message %s" % (i,), timestamp=timestamp, from_addr=addr)
             yield self.backend.add_inbound_message(msg, batch_ids=[batch_id])
             all_keys.append(
-                (msg["message_id"], vumi_date(timestamp), addr))
+                (msg["message_id"], format_vumi_date(timestamp), addr))
 
         keys_p1 = (
             yield self.store.list_batch_inbound_keys_with_addresses_reverse(
@@ -1318,7 +1311,7 @@ class TestQueryMessageStore(VumiTestCase):
                 "Message %s" % (i,), timestamp=timestamp, to_addr=addr)
             yield self.backend.add_outbound_message(msg, batch_ids=[batch_id])
             all_keys.append(
-                (msg["message_id"], vumi_date(timestamp), addr))
+                (msg["message_id"], format_vumi_date(timestamp), addr))
 
         keys_p1 = (
             yield self.store.list_batch_outbound_keys_with_addresses_reverse(
@@ -1346,7 +1339,7 @@ class TestQueryMessageStore(VumiTestCase):
                 "Message %s" % (i,), timestamp=timestamp, to_addr=addr)
             yield self.backend.add_outbound_message(msg, batch_ids=[batch_id])
             all_keys.append(
-                (msg["message_id"], vumi_date(timestamp), addr))
+                (msg["message_id"], format_vumi_date(timestamp), addr))
 
         keys_p1 = (
             yield self.store.list_batch_outbound_keys_with_addresses_reverse(
@@ -1374,7 +1367,7 @@ class TestQueryMessageStore(VumiTestCase):
                 "Message %s" % (i,), timestamp=timestamp, to_addr=addr)
             yield self.backend.add_outbound_message(msg, batch_ids=[batch_id])
             all_keys.append(
-                (msg["message_id"], vumi_date(timestamp), addr))
+                (msg["message_id"], format_vumi_date(timestamp), addr))
 
         keys_p1 = (
             yield self.store.list_batch_outbound_keys_with_addresses_reverse(
@@ -1402,7 +1395,7 @@ class TestQueryMessageStore(VumiTestCase):
                 "Message %s" % (i,), timestamp=timestamp, to_addr=addr)
             yield self.backend.add_outbound_message(msg, batch_ids=[batch_id])
             all_keys.append(
-                (msg["message_id"], vumi_date(timestamp), addr))
+                (msg["message_id"], format_vumi_date(timestamp), addr))
 
         keys_p1 = (
             yield self.store.list_batch_outbound_keys_with_addresses_reverse(
@@ -1449,11 +1442,12 @@ class TestQueryMessageStore(VumiTestCase):
             self.msg_helper.make_delivery_report(
                 msg, timestamp=(start + timedelta(seconds=4))),
         ]
-        all_keys = [(ack["event_id"], vumi_date(ack["timestamp"]), "ack")]
+        all_keys = [
+            (ack["event_id"], format_vumi_date(ack["timestamp"]), "ack")]
         for dr in drs:
             yield self.backend.add_event(dr)
             all_keys.append(
-                (dr["event_id"], vumi_date(dr["timestamp"]),
+                (dr["event_id"], format_vumi_date(dr["timestamp"]),
                  "delivery_report.delivered"))
 
         keys_p1 = yield self.store.list_message_event_keys_with_statuses(
