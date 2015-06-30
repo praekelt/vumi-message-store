@@ -208,8 +208,8 @@ class QueryMessageStore(object):
     def list_batch_inbound_keys_with_addresses(self, batch_id, start=None,
                                                end=None, max_results=None):
         """
-        List inbound message keys with timestamps and addresses for the given
-        batch.
+        List inbound message keys with timestamps and addresses in ascending
+        timestamp order for the given batch.
         """
         return self.riak_backend.list_batch_inbound_keys_with_addresses(
             batch_id, start=start, end=end, max_results=max_results)
@@ -217,11 +217,33 @@ class QueryMessageStore(object):
     def list_batch_outbound_keys_with_addresses(self, batch_id, start=None,
                                                 end=None, max_results=None):
         """
-        List outbound message keys with timestamps and addresses for the given
-        batch.
+        List outbound message keys with timestamps and addresses in ascending
+        timestamp order for the given batch.
         """
         return self.riak_backend.list_batch_outbound_keys_with_addresses(
             batch_id, start=start, end=end, max_results=max_results)
+
+    def list_batch_inbound_keys_with_addresses_reverse(self, batch_id,
+                                                       start=None, end=None,
+                                                       max_results=None):
+        """
+        List inbound message keys with timestamps and addresses in ascending
+        timestamp order for the given batch.
+        """
+        return (self.riak_backend.
+                list_batch_inbound_keys_with_addresses_reverse(
+                    batch_id, start=start, end=end, max_results=max_results))
+
+    def list_batch_outbound_keys_with_addresses_reverse(self, batch_id,
+                                                        start=None, end=None,
+                                                        max_results=None):
+        """
+        List outbound message keys with timestamps and addresses in ascending
+        timestamp order for the given batch.
+        """
+        return (self.riak_backend.
+                list_batch_outbound_keys_with_addresses_reverse(
+                    batch_id, start=start, end=end, max_results=max_results))
 
     def list_message_event_keys_with_statuses(self, message_id,
                                               max_results=None):
