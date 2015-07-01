@@ -3,7 +3,7 @@ Tests for vumi_message_store.message_store.
 """
 from datetime import datetime, timedelta
 
-from twisted.internet.defer import inlineCallbacks, returnValue
+from twisted.internet.defer import inlineCallbacks
 from vumi.message import format_vumi_date
 from vumi.tests.helpers import VumiTestCase, MessageHelper, PersistenceHelper
 from zope.interface.verify import verifyObject
@@ -13,6 +13,7 @@ from vumi_message_store.interfaces import (
     IMessageStoreBatchManager, IOperationalMessageStore, IQueryMessageStore)
 from vumi_message_store.message_store import (
     MessageStoreBatchManager, OperationalMessageStore, QueryMessageStore)
+from vumi_message_store.tests.helpers import MessageSequenceHelper
 
 
 # TODO: Better way to test indexes. Currently indexes are retrieved
@@ -564,7 +565,7 @@ class TestOperationalMessageStore(VumiTestCase):
         self.assertEqual(stored_record, None)
 
 
-class TestQueryMessageStoreBase(VumiTestCase):
+class TestQueryMessageStore(VumiTestCase):
 
     @inlineCallbacks
     def setUp(self):
@@ -577,69 +578,8 @@ class TestQueryMessageStoreBase(VumiTestCase):
         self.backend = self.store.riak_backend
         self.bi_cache = self.store.batch_info_cache
         self.msg_helper = self.add_helper(MessageHelper())
-
-    @inlineCallbacks
-    def _create_inbound_message_sequence(self, timestamps=False,
-                                         addresses=False, reverse=False):
-        """
-        Create a sequence of 5 inbound messages in a new batch and add them to
-        the backend. Returns the batch id and the list of message keys.
-        """
-        batch_id = yield self.backend.batch_start()
-        all_keys = []
-        start = (datetime.utcnow().replace(microsecond=0) -
-                 timedelta(seconds=10))
-        for i in xrange(5):
-            timestamp = start + timedelta(seconds=i)
-            addr = "addr%s" % (i,)
-            msg = self.msg_helper.make_inbound(
-                "Message %s" % (i,), timestamp=timestamp, from_addr=addr)
-            yield self.backend.add_inbound_message(msg, batch_ids=[batch_id])
-
-            key_tuple = [msg["message_id"], ]
-            if timestamps:
-                key_tuple.append(format_vumi_date(timestamp))
-            if addresses:
-                key_tuple.append(addr)
-            all_keys.append(
-                tuple(key_tuple) if len(key_tuple) > 1 else key_tuple[0])
-
-        if reverse:
-            all_keys.reverse()
-        returnValue((batch_id, all_keys))
-
-    @inlineCallbacks
-    def _create_outbound_message_sequence(self, timestamps=False,
-                                          addresses=False, reverse=False):
-        """
-        Create a sequence of 5 outbound messages in a new batch and add them to
-        the backend. Returns the batch id and the list of message keys.
-        """
-        batch_id = yield self.backend.batch_start()
-        all_keys = []
-        start = (datetime.utcnow().replace(microsecond=0) -
-                 timedelta(seconds=10))
-        for i in xrange(5):
-            timestamp = start + timedelta(seconds=i)
-            addr = "addr%s" % (i,)
-            msg = self.msg_helper.make_inbound(
-                "Message %s" % (i,), timestamp=timestamp, to_addr=addr)
-            yield self.backend.add_outbound_message(msg, batch_ids=[batch_id])
-
-            key_tuple = [msg["message_id"], ]
-            if timestamps:
-                key_tuple.append(format_vumi_date(timestamp))
-            if addresses:
-                key_tuple.append(addr)
-            all_keys.append(
-                tuple(key_tuple) if len(key_tuple) > 1 else key_tuple[0])
-
-        if reverse:
-            all_keys.reverse()
-        returnValue((batch_id, all_keys))
-
-
-class TestQueryMessageStore(TestQueryMessageStoreBase):
+        self.msg_seq_helper = self.add_helper(
+            MessageSequenceHelper(self.backend, self.msg_helper))
 
     def test_implements_IQueryMessageStore(self):
         """
@@ -714,8 +654,9 @@ class TestQueryMessageStore(TestQueryMessageStoreBase):
         containing the first page of results and can ask for following pages
         until all results are delivered.
         """
-        batch_id, all_keys = yield self._create_inbound_message_sequence()
-        all_keys.sort()
+        batch_id, all_keys = (
+            yield self.msg_seq_helper.create_inbound_message_sequence())
+        all_keys = sorted(key for key, _, _ in all_keys)
 
         keys_p1 = yield self.store.list_batch_inbound_keys(batch_id, 3)
         # Paginated results are sorted by key.
@@ -731,8 +672,9 @@ class TestQueryMessageStore(TestQueryMessageStoreBase):
         containing the first page of results and can ask for following pages
         until all results are delivered.
         """
-        batch_id, all_keys = yield self._create_outbound_message_sequence()
-        all_keys.sort()
+        batch_id, all_keys = (
+            yield self.msg_seq_helper.create_outbound_message_sequence())
+        all_keys = sorted(key for key, _, _ in all_keys)
 
         keys_p1 = yield self.store.list_batch_outbound_keys(batch_id, 3)
         # Paginated results are sorted by key.
@@ -778,7 +720,8 @@ class TestQueryMessageStore(TestQueryMessageStoreBase):
         for following pages until all results are delivered.
         """
         batch_id, all_keys = (
-            yield self._create_inbound_message_sequence(timestamps=True))
+            yield self.msg_seq_helper.create_inbound_message_sequence())
+        all_keys = [(key, ts) for key, ts, _ in all_keys]
         keys_p1 = yield self.store.list_batch_inbound_keys_with_timestamps(
             batch_id, max_results=3)
         # Paginated results are sorted by timestamp.
@@ -794,7 +737,8 @@ class TestQueryMessageStore(TestQueryMessageStoreBase):
         specify a start timestamp.
         """
         batch_id, all_keys = (
-            yield self._create_inbound_message_sequence(timestamps=True))
+            yield self.msg_seq_helper.create_inbound_message_sequence())
+        all_keys = [(key, ts) for key, ts, _ in all_keys]
         keys_p1 = yield self.store.list_batch_inbound_keys_with_timestamps(
             batch_id, start=all_keys[1][1], max_results=3)
         # Paginated results are sorted by timestamp.
@@ -810,7 +754,8 @@ class TestQueryMessageStore(TestQueryMessageStoreBase):
         specify an end timestamp.
         """
         batch_id, all_keys = (
-            yield self._create_inbound_message_sequence(timestamps=True))
+            yield self.msg_seq_helper.create_inbound_message_sequence())
+        all_keys = [(key, ts) for key, ts, _ in all_keys]
         keys_p1 = yield self.store.list_batch_inbound_keys_with_timestamps(
             batch_id, end=all_keys[-2][1], max_results=3)
         # Paginated results are sorted by timestamp.
@@ -826,7 +771,8 @@ class TestQueryMessageStore(TestQueryMessageStoreBase):
         specify both ends of the range.
         """
         batch_id, all_keys = (
-            yield self._create_inbound_message_sequence(timestamps=True))
+            yield self.msg_seq_helper.create_inbound_message_sequence())
+        all_keys = [(key, ts) for key, ts, _ in all_keys]
         keys_p1 = yield self.store.list_batch_inbound_keys_with_timestamps(
             batch_id, start=all_keys[1][1], end=all_keys[-2][1], max_results=2)
         # Paginated results are sorted by timestamp.
@@ -854,7 +800,8 @@ class TestQueryMessageStore(TestQueryMessageStoreBase):
         for following pages until all results are delivered.
         """
         batch_id, all_keys = (
-            yield self._create_outbound_message_sequence(timestamps=True))
+            yield self.msg_seq_helper.create_outbound_message_sequence())
+        all_keys = [(key, ts) for key, ts, _ in all_keys]
         keys_p1 = yield self.store.list_batch_outbound_keys_with_timestamps(
             batch_id, max_results=3)
         # Paginated results are sorted by timestamp.
@@ -870,7 +817,8 @@ class TestQueryMessageStore(TestQueryMessageStoreBase):
         specify a start timestamp.
         """
         batch_id, all_keys = (
-            yield self._create_outbound_message_sequence(timestamps=True))
+            yield self.msg_seq_helper.create_outbound_message_sequence())
+        all_keys = [(key, ts) for key, ts, _ in all_keys]
         keys_p1 = yield self.store.list_batch_outbound_keys_with_timestamps(
             batch_id, start=all_keys[1][1], max_results=3)
         # Paginated results are sorted by timestamp.
@@ -886,7 +834,8 @@ class TestQueryMessageStore(TestQueryMessageStoreBase):
         specify an end timestamp.
         """
         batch_id, all_keys = (
-            yield self._create_outbound_message_sequence(timestamps=True))
+            yield self.msg_seq_helper.create_outbound_message_sequence())
+        all_keys = [(key, ts) for key, ts, _ in all_keys]
         keys_p1 = yield self.store.list_batch_outbound_keys_with_timestamps(
             batch_id, end=all_keys[-2][1], max_results=3)
         # Paginated results are sorted by timestamp.
@@ -902,7 +851,8 @@ class TestQueryMessageStore(TestQueryMessageStoreBase):
         specify both ends of the range.
         """
         batch_id, all_keys = (
-            yield self._create_outbound_message_sequence(timestamps=True))
+            yield self.msg_seq_helper.create_outbound_message_sequence())
+        all_keys = [(key, ts) for key, ts, _ in all_keys]
         keys_p1 = yield self.store.list_batch_outbound_keys_with_timestamps(
             batch_id, start=all_keys[1][1], end=all_keys[-2][1], max_results=2)
         # Paginated results are sorted by timestamp.
@@ -929,8 +879,8 @@ class TestQueryMessageStore(TestQueryMessageStoreBase):
         an IndexPageWrapper containing the first page of results and can ask
         for following pages until all results are delivered.
         """
-        batch_id, all_keys = yield self._create_inbound_message_sequence(
-            timestamps=True, addresses=True)
+        batch_id, all_keys = (
+            yield self.msg_seq_helper.create_inbound_message_sequence())
         keys_p1 = yield self.store.list_batch_inbound_keys_with_addresses(
             batch_id, max_results=3)
         # Paginated results are sorted by timestamp.
@@ -945,8 +895,8 @@ class TestQueryMessageStore(TestQueryMessageStoreBase):
         When we ask for a list of inbound message keys with addresses, we can
         specify a start timestamp.
         """
-        batch_id, all_keys = yield self._create_inbound_message_sequence(
-            timestamps=True, addresses=True)
+        batch_id, all_keys = (
+            yield self.msg_seq_helper.create_inbound_message_sequence())
         keys_p1 = yield self.store.list_batch_inbound_keys_with_addresses(
             batch_id, start=all_keys[1][1], max_results=3)
         # Paginated results are sorted by timestamp.
@@ -961,8 +911,8 @@ class TestQueryMessageStore(TestQueryMessageStoreBase):
         When we ask for a list of inbound message keys with addresses, we can
         specify an end timestamp.
         """
-        batch_id, all_keys = yield self._create_inbound_message_sequence(
-            timestamps=True, addresses=True)
+        batch_id, all_keys = (
+            yield self.msg_seq_helper.create_inbound_message_sequence())
         keys_p1 = yield self.store.list_batch_inbound_keys_with_addresses(
             batch_id, end=all_keys[-2][1], max_results=3)
         # Paginated results are sorted by timestamp.
@@ -977,8 +927,8 @@ class TestQueryMessageStore(TestQueryMessageStoreBase):
         When we ask for a list of inbound message keys with addresses, we can
         specify both ends of the range.
         """
-        batch_id, all_keys = yield self._create_inbound_message_sequence(
-            timestamps=True, addresses=True)
+        batch_id, all_keys = (
+            yield self.msg_seq_helper.create_inbound_message_sequence())
         keys_p1 = yield self.store.list_batch_inbound_keys_with_addresses(
             batch_id, start=all_keys[1][1], end=all_keys[-2][1], max_results=2)
         # Paginated results are sorted by timestamp.
@@ -1005,8 +955,8 @@ class TestQueryMessageStore(TestQueryMessageStoreBase):
         an IndexPageWrapper containing the first page of results and can ask
         for following pages until all results are delivered.
         """
-        batch_id, all_keys = yield self._create_outbound_message_sequence(
-            timestamps=True, addresses=True)
+        batch_id, all_keys = (
+            yield self.msg_seq_helper.create_outbound_message_sequence())
         keys_p1 = yield self.store.list_batch_outbound_keys_with_addresses(
             batch_id, max_results=3)
         # Paginated results are sorted by timestamp.
@@ -1021,8 +971,8 @@ class TestQueryMessageStore(TestQueryMessageStoreBase):
         When we ask for a list of outbound message keys with addresses, we can
         specify a start timestamp.
         """
-        batch_id, all_keys = yield self._create_outbound_message_sequence(
-            timestamps=True, addresses=True)
+        batch_id, all_keys = (
+            yield self.msg_seq_helper.create_outbound_message_sequence())
         keys_p1 = yield self.store.list_batch_outbound_keys_with_addresses(
             batch_id, start=all_keys[1][1], max_results=3)
         # Paginated results are sorted by timestamp.
@@ -1037,8 +987,8 @@ class TestQueryMessageStore(TestQueryMessageStoreBase):
         When we ask for a list of outbound message keys with addresses, we can
         specify an end timestamp.
         """
-        batch_id, all_keys = yield self._create_outbound_message_sequence(
-            timestamps=True, addresses=True)
+        batch_id, all_keys = (
+            yield self.msg_seq_helper.create_outbound_message_sequence())
         keys_p1 = yield self.store.list_batch_outbound_keys_with_addresses(
             batch_id, end=all_keys[-2][1], max_results=3)
         # Paginated results are sorted by timestamp.
@@ -1053,8 +1003,8 @@ class TestQueryMessageStore(TestQueryMessageStoreBase):
         When we ask for a list of outbound message keys with addresses, we can
         specify both ends of the range.
         """
-        batch_id, all_keys = yield self._create_outbound_message_sequence(
-            timestamps=True, addresses=True)
+        batch_id, all_keys = (
+            yield self.msg_seq_helper.create_outbound_message_sequence())
         keys_p1 = yield self.store.list_batch_outbound_keys_with_addresses(
             batch_id, start=all_keys[1][1], end=all_keys[-2][1], max_results=2)
         # Paginated results are sorted by timestamp.
@@ -1081,8 +1031,9 @@ class TestQueryMessageStore(TestQueryMessageStoreBase):
         an IndexPageWrapper containing the first page of results and can ask
         for following pages until all results are delivered.
         """
-        batch_id, all_keys = yield self._create_inbound_message_sequence(
-            timestamps=True, addresses=True, reverse=True)
+        batch_id, all_keys = (
+            yield self.msg_seq_helper.create_inbound_message_sequence())
+        all_keys.reverse()
         keys_p1 = (
             yield self.store.list_batch_inbound_keys_with_addresses_reverse(
                 batch_id, max_results=3))
@@ -1098,8 +1049,9 @@ class TestQueryMessageStore(TestQueryMessageStoreBase):
         When we ask for a list of inbound message keys with addresses, we can
         specify a start timestamp.
         """
-        batch_id, all_keys = yield self._create_inbound_message_sequence(
-            timestamps=True, addresses=True, reverse=True)
+        batch_id, all_keys = (
+            yield self.msg_seq_helper.create_inbound_message_sequence())
+        all_keys.reverse()
         keys_p1 = (
             yield self.store.list_batch_inbound_keys_with_addresses_reverse(
                 batch_id, start=all_keys[1][1], max_results=3))
@@ -1115,8 +1067,9 @@ class TestQueryMessageStore(TestQueryMessageStoreBase):
         When we ask for a list of inbound message keys with addresses, we can
         specify an end timestamp.
         """
-        batch_id, all_keys = yield self._create_inbound_message_sequence(
-            timestamps=True, addresses=True, reverse=True)
+        batch_id, all_keys = (
+            yield self.msg_seq_helper.create_inbound_message_sequence())
+        all_keys.reverse()
         keys_p1 = (
             yield self.store.list_batch_inbound_keys_with_addresses_reverse(
                 batch_id, end=all_keys[-2][1], max_results=3))
@@ -1132,8 +1085,9 @@ class TestQueryMessageStore(TestQueryMessageStoreBase):
         When we ask for a list of inbound message keys with addresses, we can
         specify both ends of the range.
         """
-        batch_id, all_keys = yield self._create_inbound_message_sequence(
-            timestamps=True, addresses=True, reverse=True)
+        batch_id, all_keys = (
+            yield self.msg_seq_helper.create_inbound_message_sequence())
+        all_keys.reverse()
         keys_p1 = (
             yield self.store.list_batch_inbound_keys_with_addresses_reverse(
                 batch_id, start=all_keys[1][1], end=all_keys[-2][1],
@@ -1163,8 +1117,9 @@ class TestQueryMessageStore(TestQueryMessageStoreBase):
         an IndexPageWrapper containing the first page of results and can ask
         for following pages until all results are delivered.
         """
-        batch_id, all_keys = yield self._create_outbound_message_sequence(
-            timestamps=True, addresses=True, reverse=True)
+        batch_id, all_keys = (
+            yield self.msg_seq_helper.create_outbound_message_sequence())
+        all_keys.reverse()
         keys_p1 = (
             yield self.store.list_batch_outbound_keys_with_addresses_reverse(
                 batch_id, max_results=3))
@@ -1180,8 +1135,9 @@ class TestQueryMessageStore(TestQueryMessageStoreBase):
         When we ask for a list of outbound message keys with addresses, we can
         specify a start timestamp.
         """
-        batch_id, all_keys = yield self._create_outbound_message_sequence(
-            timestamps=True, addresses=True, reverse=True)
+        batch_id, all_keys = (
+            yield self.msg_seq_helper.create_outbound_message_sequence())
+        all_keys.reverse()
         keys_p1 = (
             yield self.store.list_batch_outbound_keys_with_addresses_reverse(
                 batch_id, start=all_keys[1][1], max_results=3))
@@ -1197,8 +1153,9 @@ class TestQueryMessageStore(TestQueryMessageStoreBase):
         When we ask for a list of outbound message keys with addresses, we can
         specify an end timestamp.
         """
-        batch_id, all_keys = yield self._create_outbound_message_sequence(
-            timestamps=True, addresses=True, reverse=True)
+        batch_id, all_keys = (
+            yield self.msg_seq_helper.create_outbound_message_sequence())
+        all_keys.reverse()
         keys_p1 = (
             yield self.store.list_batch_outbound_keys_with_addresses_reverse(
                 batch_id, end=all_keys[-2][1], max_results=3))
@@ -1214,8 +1171,9 @@ class TestQueryMessageStore(TestQueryMessageStoreBase):
         When we ask for a list of outbound message keys with addresses, we can
         specify both ends of the range.
         """
-        batch_id, all_keys = yield self._create_outbound_message_sequence(
-            timestamps=True, addresses=True, reverse=True)
+        batch_id, all_keys = (
+            yield self.msg_seq_helper.create_outbound_message_sequence())
+        all_keys.reverse()
         keys_p1 = (
             yield self.store.list_batch_outbound_keys_with_addresses_reverse(
                 batch_id, start=all_keys[1][1], end=all_keys[-2][1],
