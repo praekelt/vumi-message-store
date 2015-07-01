@@ -35,4 +35,4 @@ class TestFakeRiakState(VumiTestCase):
         # Assert that the first object has been removed from the index
         index = bucket["indexes"]["index_key"]
         object1_index_values = [(v, k) for v, k in index if k == object1.key]
-        self.assertFalse(any(object1_index_values))
+        self.assertEqual(object1_index_values, [])
