@@ -1,14 +1,14 @@
 from datetime import datetime, timedelta
 
 from twisted.internet.defer import inlineCallbacks, returnValue
-from zope.interface import implements
+from zope.interface import implementer
 
 from vumi.tests.helpers import IHelper
 from vumi.message import format_vumi_date
 
 
+@implementer(IHelper)
 class MessageSequenceHelper(object):
-    implements(IHelper)
 
     def __init__(self, backend, msg_helper):
         self._backend = backend
