@@ -165,34 +165,28 @@ class FakeRiakState(object):
             "content_type": fake_object._current_data["content_type"],
             "data": json.dumps(fake_object._current_data["data"]),
         }
-        indexes = {}
+
+        bucket["indexes"] = (
+            self._rebuild_bucket_indexes(fake_object, bucket["indexes"]))
+
+    def _rebuild_bucket_indexes(self, fake_object, bucket_indexes):
+        """
+        Clears any existing indexes for the object and adds the new indexes.
+        """
+        new_bucket_indexes = {}
+        for index_name, index_values in bucket_indexes.iteritems():
+            new_index_values = list(filter(
+                lambda (_, key): key != fake_object.key, index_values))
+
+            if new_index_values:
+                new_bucket_indexes[index_name] = new_index_values
+
         for index_name, index_value in fake_object._current_data["indexes"]:
-            indexes.setdefault(index_name, []).append(
-                (index_value, fake_object.key))
+            new_index_values = new_bucket_indexes.setdefault(index_name, [])
+            new_index_values.append((index_value, fake_object.key))
+            new_index_values.sort()
 
-        bucket["indexes"] = self._filter_old_indexes(
-            fake_object, bucket["indexes"])
-
-        for index_name, index_values in indexes.iteritems():
-            old_indexes = bucket["indexes"].get(index_name, [])
-            new_indexes = [
-                (value, key) for value, key in old_indexes
-                if key != fake_object.key]
-            new_indexes.extend(index_values)
-            new_indexes.sort()
-            bucket["indexes"][index_name] = new_indexes
-
-    def _filter_old_indexes(self, fake_object, global_indexes):
-        """
-        Remove the object's key from indexes it no longer specifies
-        """
-        filtered_indexes = {}
-        for index_name, index_data in global_indexes.iteritems():
-            if index_name not in fake_object._current_data["indexes"]:
-                index_data = list(filter(
-                    lambda (_, key): key != fake_object.key, index_data))
-            filtered_indexes[index_name] = index_data
-        return filtered_indexes
+        return new_bucket_indexes
 
     def _reload_object_state(self, fake_object):
         """
