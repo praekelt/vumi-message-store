@@ -175,8 +175,8 @@ class FakeRiakState(object):
         """
         new_bucket_indexes = {}
         for index_name, index_values in bucket_indexes.iteritems():
-            new_index_values = list(filter(
-                lambda (_, key): key != fake_object.key, index_values))
+            new_index_values = [(value, key) for value, key in index_values
+                                if key != fake_object.key]
 
             if new_index_values:
                 new_bucket_indexes[index_name] = new_index_values
