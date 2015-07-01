@@ -227,7 +227,7 @@ class QueryMessageStore(object):
                                                        start=None, end=None,
                                                        max_results=None):
         """
-        List inbound message keys with timestamps and addresses in ascending
+        List inbound message keys with timestamps and addresses in descending
         timestamp order for the given batch.
         """
         return (self.riak_backend.
@@ -238,7 +238,7 @@ class QueryMessageStore(object):
                                                         start=None, end=None,
                                                         max_results=None):
         """
-        List outbound message keys with timestamps and addresses in ascending
+        List outbound message keys with timestamps and addresses in descending
         timestamp order for the given batch.
         """
         return (self.riak_backend.
