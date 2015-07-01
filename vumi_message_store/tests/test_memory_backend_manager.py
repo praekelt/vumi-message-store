@@ -13,22 +13,26 @@ class TestFakeRiakState(VumiTestCase):
         self.add_cleanup(self.state.teardown)
 
     def test_old_objects_removed_from_indexes(self):
+        """
+        When a stored object removes an index and is stored again, the old
+        index must not reference the object any more
+        """
         bucket = self.state._get_bucket("bucket")
 
         # Add two objects with "index_key" index values
-        fake_object1 = FakeRiakObject(self.state, "bucket", "mykey")
-        fake_object2 = FakeRiakObject(self.state, "bucket", "mykey2")
-        fake_object1.add_index("index_key", "index_value")
-        fake_object2.add_index("index_key", "index_value2")
-        self.state.store_object(fake_object1)
-        self.state.store_object(fake_object2)
+        object1 = FakeRiakObject(self.state, "bucket", "mykey")
+        object2 = FakeRiakObject(self.state, "bucket", "mykey2")
+        object1.add_index("index_key", "index_value")
+        object2.add_index("index_key", "index_value2")
+        self.state.store_object(object1)
+        self.state.store_object(object2)
 
         # Remove the index value for the first object and store it again
-        fake_object1.remove_index("index_key")
-        fake_object1.add_index("newkey", "newvalue")
-        self.state.store_object(fake_object1)
+        object1.remove_index("index_key")
+        object1.add_index("newkey", "newvalue")
+        self.state.store_object(object1)
 
         # Assert that the first object has been removed from the index
         index = bucket["indexes"]["index_key"]
-        is_object1_key = lambda (_, key): key == fake_object1.key
-        self.assertFalse(any(filter(is_object1_key, index)))
+        object1_index_values = [(v, k) for v, k in index if k == object1.key]
+        self.assertFalse(any(object1_index_values))
