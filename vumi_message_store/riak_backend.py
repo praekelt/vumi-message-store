@@ -10,6 +10,7 @@ from twisted.internet.defer import returnValue
 from vumi.persist.model import Manager
 
 from vumi_message_store.models import (
+    from_reverse_timestamp, to_reverse_timestamp,
     Batch, CurrentTag, InboundMessage, OutboundMessage, Event)
 
 
@@ -228,10 +229,10 @@ class MessageStoreRiakBackend(object):
             max_results = self.DEFAULT_MAX_RESULTS
         start_value, end_value = self._start_end_values(batch_id, start, end)
         results = yield self.inbound_messages.index_keys_page(
-            'batches_with_timestamps', start_value, end_value,
+            'batches_with_addresses', start_value, end_value,
             return_terms=True, max_results=max_results)
         returnValue(IndexPageWrapper(
-            key_with_timestamp_formatter, self, batch_id, results))
+            key_with_ts_only_formatter, self, batch_id, results))
 
     @Manager.calls_manager
     def list_batch_outbound_keys_with_timestamps(self, batch_id, start=None,
@@ -243,17 +244,17 @@ class MessageStoreRiakBackend(object):
             max_results = self.DEFAULT_MAX_RESULTS
         start_value, end_value = self._start_end_values(batch_id, start, end)
         results = yield self.outbound_messages.index_keys_page(
-            'batches_with_timestamps', start_value, end_value,
+            'batches_with_addresses', start_value, end_value,
             return_terms=True, max_results=max_results)
         returnValue(IndexPageWrapper(
-            key_with_timestamp_formatter, self, batch_id, results))
+            key_with_ts_only_formatter, self, batch_id, results))
 
     @Manager.calls_manager
     def list_batch_inbound_keys_with_addresses(self, batch_id, start=None,
                                                end=None, max_results=None):
         """
-        List inbound message keys with timestamps and addresses for the given
-        batch.
+        List inbound message keys with timestamps and addresses in ascending
+        timestamp order for the given batch.
         """
         if max_results is None:
             max_results = self.DEFAULT_MAX_RESULTS
@@ -268,8 +269,8 @@ class MessageStoreRiakBackend(object):
     def list_batch_outbound_keys_with_addresses(self, batch_id, start=None,
                                                 end=None, max_results=None):
         """
-        List outbound message keys with timestamps and addresses for the given
-        batch.
+        List outbound message keys with timestamps and addresses in ascending
+        timestamp order for the given batch.
         """
         if max_results is None:
             max_results = self.DEFAULT_MAX_RESULTS
@@ -279,6 +280,48 @@ class MessageStoreRiakBackend(object):
             return_terms=True, max_results=max_results)
         returnValue(IndexPageWrapper(
             key_with_ts_and_value_formatter, self, batch_id, results))
+
+    @Manager.calls_manager
+    def list_batch_inbound_keys_with_addresses_reverse(self, batch_id,
+                                                       start=None, end=None,
+                                                       max_results=None):
+        """
+        List inbound message keys with timestamps and addresses in descending
+        timestamp order for the given batch.
+        """
+        if start is not None:
+            start = to_reverse_timestamp(start)
+        if end is not None:
+            end = to_reverse_timestamp(end)
+        if max_results is None:
+            max_results = self.DEFAULT_MAX_RESULTS
+        start_value, end_value = self._start_end_values(batch_id, start, end)
+        results = yield self.inbound_messages.index_keys_page(
+            'batches_with_addresses_reverse', start_value, end_value,
+            return_terms=True, max_results=max_results)
+        returnValue(IndexPageWrapper(
+            key_with_rts_and_value_formatter, self, batch_id, results))
+
+    @Manager.calls_manager
+    def list_batch_outbound_keys_with_addresses_reverse(self, batch_id,
+                                                        start=None, end=None,
+                                                        max_results=None):
+        """
+        List outbound message keys with timestamps and addresses in descending
+        timestamp order for the given batch.
+        """
+        if start is not None:
+            start = to_reverse_timestamp(start)
+        if end is not None:
+            end = to_reverse_timestamp(end)
+        if max_results is None:
+            max_results = self.DEFAULT_MAX_RESULTS
+        start_value, end_value = self._start_end_values(batch_id, start, end)
+        results = yield self.outbound_messages.index_keys_page(
+            'batches_with_addresses_reverse', start_value, end_value,
+            return_terms=True, max_results=max_results)
+        returnValue(IndexPageWrapper(
+            key_with_rts_and_value_formatter, self, batch_id, results))
 
     @Manager.calls_manager
     def list_message_event_keys_with_statuses(self, message_id,
@@ -348,16 +391,6 @@ class IndexPageWrapper(object):
         return (self._formatter(self._batch_id, r) for r in self._index_page)
 
 
-def key_with_timestamp_formatter(batch_id, result):
-    value, key = result
-    prefix = batch_id + "$"
-    if not value.startswith(prefix):
-        raise ValueError(
-            "Index value %r does not begin with expected prefix %r." % (
-                value, prefix))
-    return (key, value[len(prefix):])
-
-
 def key_with_ts_and_value_formatter(batch_id, result):
     value, key = result
     prefix = batch_id + "$"
@@ -371,3 +404,13 @@ def key_with_ts_and_value_formatter(batch_id, result):
         raise ValueError(
             "Index value %r does not match expected format." % (value,))
     return (key, timestamp, address)
+
+
+def key_with_rts_and_value_formatter(batch_id, result):
+    key, reverse_ts, value = key_with_ts_and_value_formatter(batch_id, result)
+    return (key, from_reverse_timestamp(reverse_ts), value)
+
+
+def key_with_ts_only_formatter(batch_id, result):
+    key, timestamp, value = key_with_ts_and_value_formatter(batch_id, result)
+    return (key, timestamp)

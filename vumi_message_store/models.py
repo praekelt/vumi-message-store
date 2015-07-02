@@ -2,12 +2,39 @@
 Riak models for message store objects.
 """
 
-from vumi.message import TransportEvent, TransportUserMessage
+from calendar import timegm
+from datetime import datetime
+
+from vumi.message import (
+    TransportEvent, TransportUserMessage, parse_vumi_date, format_vumi_date)
 from vumi.persist.model import Model
 from vumi.persist.fields import (
     VumiMessage, ForeignKey, ManyToMany, ListOf, Tag, Dynamic, Unicode)
 from vumi_message_store.migrators import (
     InboundMessageMigrator, OutboundMessageMigrator, EventMigrator)
+
+
+def to_reverse_timestamp(vumi_timestamp):
+    """
+    Turn a vumi_date-formatted string into a string that sorts in reverse order
+    and can be turned back into a timestamp later.
+
+    This is done by converting to a unix timestamp and subtracting it from
+    0xffffffffff (2**40 - 1) to get a number well outside the range
+    representable by the datetime module. The result is returned as a
+    hexadecimal string.
+    """
+    timestamp = timegm(parse_vumi_date(vumi_timestamp).timetuple())
+    return "%X" % (0xffffffffff - timestamp)
+
+
+def from_reverse_timestamp(reverse_timestamp):
+    """
+    Turn a reverse timestamp string (from `to_reverse_timestamp()`) into a
+    vumi_date-formatted string.
+    """
+    timestamp = 0xffffffffff - int(reverse_timestamp, 16)
+    return format_vumi_date(datetime.utcfromtimestamp(timestamp))
 
 
 class Batch(Model):
@@ -53,7 +80,7 @@ class CurrentTag(Model):
 
 
 class InboundMessage(Model):
-    VERSION = 3
+    VERSION = 5
     MIGRATOR = InboundMessageMigrator
 
     # key is message_id
@@ -61,25 +88,27 @@ class InboundMessage(Model):
     batches = ManyToMany(Batch)
 
     # Extra fields for compound indexes
-    batches_with_timestamps = ListOf(Unicode(), index=True)
     batches_with_addresses = ListOf(Unicode(), index=True)
+    batches_with_addresses_reverse = ListOf(Unicode(), index=True)
 
     def save(self):
         # We override this method to set our index fields before saving.
-        batches_with_timestamps = []
-        batches_with_addresses = []
+        self.batches_with_addresses = []
+        self.batches_with_addresses_reverse = []
         timestamp = self.msg['timestamp']
+        if not isinstance(timestamp, basestring):
+            timestamp = format_vumi_date(timestamp)
+        reverse_ts = to_reverse_timestamp(timestamp)
         for batch_id in self.batches.keys():
-            batches_with_timestamps.append(u"%s$%s" % (batch_id, timestamp))
-            batches_with_addresses.append(
+            self.batches_with_addresses.append(
                 u"%s$%s$%s" % (batch_id, timestamp, self.msg['from_addr']))
-        self.batches_with_timestamps = batches_with_timestamps
-        self.batches_with_addresses = batches_with_addresses
+            self.batches_with_addresses_reverse.append(
+                u"%s$%s$%s" % (batch_id, reverse_ts, self.msg['from_addr']))
         return super(InboundMessage, self).save()
 
 
 class OutboundMessage(Model):
-    VERSION = 3
+    VERSION = 5
     MIGRATOR = OutboundMessageMigrator
 
     # key is message_id
@@ -87,40 +116,51 @@ class OutboundMessage(Model):
     batches = ManyToMany(Batch)
 
     # Extra fields for compound indexes
-    batches_with_timestamps = ListOf(Unicode(), index=True)
     batches_with_addresses = ListOf(Unicode(), index=True)
+    batches_with_addresses_reverse = ListOf(Unicode(), index=True)
 
     def save(self):
         # We override this method to set our index fields before saving.
-        batches_with_timestamps = []
-        batches_with_addresses = []
+        self.batches_with_addresses = []
+        self.batches_with_addresses_reverse = []
         timestamp = self.msg['timestamp']
+        if not isinstance(timestamp, basestring):
+            timestamp = format_vumi_date(timestamp)
+        reverse_ts = to_reverse_timestamp(timestamp)
         for batch_id in self.batches.keys():
-            batches_with_timestamps.append(u"%s$%s" % (batch_id, timestamp))
-            batches_with_addresses.append(
+            self.batches_with_addresses.append(
                 u"%s$%s$%s" % (batch_id, timestamp, self.msg['to_addr']))
-        self.batches_with_timestamps = batches_with_timestamps
-        self.batches_with_addresses = batches_with_addresses
+            self.batches_with_addresses_reverse.append(
+                u"%s$%s$%s" % (batch_id, reverse_ts, self.msg['to_addr']))
         return super(OutboundMessage, self).save()
 
 
 class Event(Model):
-    VERSION = 1
+    VERSION = 2
     MIGRATOR = EventMigrator
 
     # key is event_id
     event = VumiMessage(TransportEvent)
     message = ForeignKey(OutboundMessage)
+    batches = ManyToMany(Batch)
 
     # Extra fields for compound indexes
     message_with_status = Unicode(index=True, null=True)
+    batches_with_statuses_reverse = ListOf(Unicode(), index=True)
 
     def save(self):
         # We override this method to set our index fields before saving.
         timestamp = self.event['timestamp']
+        if not isinstance(timestamp, basestring):
+            timestamp = format_vumi_date(timestamp)
         status = self.event['event_type']
         if status == "delivery_report":
             status = "%s.%s" % (status, self.event['delivery_status'])
         self.message_with_status = u"%s$%s$%s" % (
             self.message.key, timestamp, status)
+        self.batches_with_statuses_reverse = []
+        reverse_ts = to_reverse_timestamp(timestamp)
+        for batch_id in self.batches.keys():
+            self.batches_with_statuses_reverse.append(
+                u"%s$%s$%s" % (batch_id, reverse_ts, status))
         return super(Event, self).save()
