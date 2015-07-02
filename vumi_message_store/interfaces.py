@@ -151,6 +151,18 @@ class IOperationalMessageStore(Interface):
             If async, a Deferred is returned instead.
         """
 
+    def get_tag_info(tag):
+        """
+        Get tag information from the message store.
+
+        :param tag:
+            A tag identifier, either in tuple format or a flattened string.
+
+        :returns:
+            A CurrentTag model object.
+            If async, a Deferred is returned instead.
+        """
+
 
 class IQueryMessageStore(Interface):
     """
