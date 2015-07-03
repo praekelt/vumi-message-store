@@ -75,6 +75,10 @@ class CurrentTag(Model):
 
     @classmethod
     def load(cls, manager, key, result=None):
+        """
+        CurrentTags can be loaded using keys that are either flat tags in the
+        form "tag:key" or tuples in the form (tag, key)
+        """
         _tag, key = cls._tag_and_key(key)
         return super(CurrentTag, cls).load(manager, key, result)
 

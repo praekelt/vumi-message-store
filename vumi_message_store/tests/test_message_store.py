@@ -564,6 +564,41 @@ class TestOperationalMessageStore(VumiTestCase):
         stored_record = yield self.store.get_event("badevent")
         self.assertEqual(stored_record, None)
 
+    @inlineCallbacks
+    def test_get_tag_info(self):
+        """
+        If we ask for tag info, we get a CurrentTag object.
+        """
+        # We use the internals of the backend here because there's no other
+        # direct way to create a CurrentTag object.
+        stored_tag = self.backend.current_tags(
+            "size:large", current_batch="mybatch")
+        yield stored_tag.save()
+        tag_info = yield self.store.get_tag_info("size:large")
+        self.assertEqual(tag_info.current_batch.key, "mybatch")
+
+    @inlineCallbacks
+    def test_get_tag_info_tuple_form(self):
+        """
+        We can specify the tag as a (pool, tagname) tuple.
+        """
+        # We use the internals of the backend here because there's no other
+        # direct way to create a CurrentTag object.
+        stored_tag = self.backend.current_tags(
+            "size:large", current_batch="mybatch")
+        yield stored_tag.save()
+        tag_info = yield self.store.get_tag_info(("size", "large"))
+        self.assertEqual(tag_info.current_batch.key, "mybatch")
+
+    @inlineCallbacks
+    def test_get_tag_info_missing_tag(self):
+        """
+        If we ask for tag info that doesn't exist, we get a new CurrentTag
+        object.
+        """
+        tag_info = yield self.store.get_tag_info("size:large")
+        self.assertEqual(tag_info.current_batch.key, None)
+
 
 class TestQueryMessageStore(VumiTestCase):
 

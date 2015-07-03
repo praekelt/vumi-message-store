@@ -61,7 +61,6 @@ class MessageStoreBatchManager(object):
         """
         Get tag information from the message store.
         """
-        # TODO: accept tuple instead of flat tag?
         return self.riak_backend.get_tag_info(tag)
 
 
@@ -131,6 +130,12 @@ class OperationalMessageStore(object):
         Get an event from the message store.
         """
         return self.riak_backend.get_event(event_id)
+
+    def get_tag_info(self, tag):
+        """
+        Get tag information from the message store.
+        """
+        return self.riak_backend.get_tag_info(tag)
 
 
 @implementer(IQueryMessageStore)
