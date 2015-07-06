@@ -63,6 +63,12 @@ class MessageStoreBatchManager(object):
         """
         return self.riak_backend.get_tag_info(tag)
 
+    def rebuild_cache(self, batch_id, qms):
+        """
+        Rebuild the cache using the provided IQueryMessageStore implementation.
+        """
+        return self.batch_info_cache.rebuild_cache(batch_id, qms)
+
 
 @implementer(IOperationalMessageStore)
 class OperationalMessageStore(object):

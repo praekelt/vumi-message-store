@@ -167,6 +167,41 @@ class TestMessageStoreBatchManager(VumiTestCase):
         tag_info = yield self.batch_manager.get_tag_info("size:large")
         self.assertEqual(tag_info.current_batch.key, None)
 
+    @inlineCallbacks
+    def test_rebuild_cache(self):
+        """
+        Rebuilding the info cache for a batch will clear all cached data and
+        rebuild it from the given QueryMessageStore.
+        """
+        msg_helper = self.add_helper(MessageHelper())
+        batch_info_cache = self.batch_manager.batch_info_cache
+
+        # Fill the message store backend with the data we want in the rebuilt
+        # cache.
+        yield self.backend.add_inbound_message(
+            msg_helper.make_inbound("in 1"), batch_ids=["mybatch"])
+        yield self.backend.add_outbound_message(
+            msg_helper.make_outbound("out 1"), batch_ids=["mybatch"])
+        yield self.backend.add_outbound_message(
+            msg_helper.make_outbound("out 2"), batch_ids=["mybatch"])
+
+        # Fill the cache with some nonsense that we want to throw out when
+        # rebuilding.
+        yield batch_info_cache.add_inbound_message_key("mybatch", "in1", 12345)
+        yield batch_info_cache.add_inbound_message_key("mybatch", "in2", 12345)
+
+        old_in = yield batch_info_cache.get_inbound_message_count("mybatch")
+        old_out = yield batch_info_cache.get_outbound_message_count("mybatch")
+        self.assertEqual((old_in, old_out), (2, 0))
+
+        # Rebuild the cache.
+        qms = QueryMessageStore(self.manager, self.redis)
+        yield self.batch_manager.rebuild_cache("mybatch", qms)
+
+        new_in = yield batch_info_cache.get_inbound_message_count("mybatch")
+        new_out = yield batch_info_cache.get_outbound_message_count("mybatch")
+        self.assertEqual((new_in, new_out), (1, 2))
+
 
 class TestOperationalMessageStore(VumiTestCase):
 
