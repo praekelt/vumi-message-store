@@ -295,9 +295,12 @@ class MessageStoreRiakBackend(object):
             end = to_reverse_timestamp(end)
         if max_results is None:
             max_results = self.DEFAULT_MAX_RESULTS
-        start_value, end_value = self._start_end_values(batch_id, start, end)
+        # The index is an inverse timestamp so the start and end range values
+        # are swapped.
+        start, end = end, start
+        start_range, end_range = self._start_end_values(batch_id, start, end)
         results = yield self.inbound_messages.index_keys_page(
-            'batches_with_addresses_reverse', start_value, end_value,
+            'batches_with_addresses_reverse', start_range, end_range,
             return_terms=True, max_results=max_results)
         returnValue(IndexPageWrapper(
             key_with_rts_and_value_formatter, self, batch_id, results))
@@ -316,9 +319,12 @@ class MessageStoreRiakBackend(object):
             end = to_reverse_timestamp(end)
         if max_results is None:
             max_results = self.DEFAULT_MAX_RESULTS
-        start_value, end_value = self._start_end_values(batch_id, start, end)
+        # The index is an inverse timestamp so the start and end range values
+        # are swapped.
+        start, end = end, start
+        start_range, end_range = self._start_end_values(batch_id, start, end)
         results = yield self.outbound_messages.index_keys_page(
-            'batches_with_addresses_reverse', start_value, end_value,
+            'batches_with_addresses_reverse', start_range, end_range,
             return_terms=True, max_results=max_results)
         returnValue(IndexPageWrapper(
             key_with_rts_and_value_formatter, self, batch_id, results))
