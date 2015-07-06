@@ -65,6 +65,21 @@ class IMessageStoreBatchManager(Interface):
             If async, a Deferred is returned instead.
         """
 
+    def rebuild_cache(batch_id, qms):
+        """
+        Rebuild the cache using the provided IQueryMessageStore implementation.
+
+        :param batch_id:
+            The batch identifier for the batch to operate on.
+
+        :param qms:
+            An `IQueryMessageStore` provider to rebuild the cache from.
+
+        :returns:
+            ``None``.
+            If async, a Deferred is returned instead.
+        """
+
 
 class IOperationalMessageStore(Interface):
     """
