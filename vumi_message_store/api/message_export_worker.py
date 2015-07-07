@@ -43,9 +43,9 @@ class MessageExportResourceWorker(BaseWorker):
     @inlineCallbacks
     def setup_worker(self):
         config = self.get_static_config()
-        riak = yield self.create_riak_manager(config)
-        redis = yield self.create_redis_manager(config)
-        self.store = QueryMessageStore(riak, redis)
+        self._riak = yield self.create_riak_manager(config)
+        self._redis = yield self.create_redis_manager(config)
+        self.store = QueryMessageStore(self._riak, self._redis)
 
         site = build_web_site({
             config.web_path: MessageExportResource(self.store),
@@ -60,8 +60,10 @@ class MessageExportResourceWorker(BaseWorker):
     def create_redis_manager(self, config):
         return TxRedisManager.from_config(config.redis_manager)
 
+    @inlineCallbacks
     def teardown_worker(self):
-        pass
+        yield self._riak.close_manager()
+        yield self._redis.close_manager()
 
     def setup_connectors(self):
         # NOTE: not doing anything AMQP
