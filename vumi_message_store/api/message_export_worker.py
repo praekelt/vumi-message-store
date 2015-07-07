@@ -21,7 +21,7 @@ class HealthResource(Resource):
         return 'OK'
 
 
-class MessageExportResourceWorker(BaseWorker):
+class MessageExportWorker(BaseWorker):
 
     class CONFIG_CLASS(BaseWorker.CONFIG_CLASS):
         worker_name = ConfigText(

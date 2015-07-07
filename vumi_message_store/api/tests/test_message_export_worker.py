@@ -9,8 +9,7 @@ from twisted.web import http
 
 from vumi_message_store.message_store import (
     MessageStoreBatchManager, OperationalMessageStore)
-from vumi_message_store.api.message_export_worker import (
-    MessageExportResourceWorker)
+from vumi_message_store.api.message_export_worker import MessageExportWorker
 
 from vumi.utils import http_request_full
 
@@ -34,7 +33,7 @@ class TestMessageExportWorker(VumiTestCase):
         })
 
         worker = yield self.worker_helper.get_worker(
-            MessageExportResourceWorker, config)
+            MessageExportWorker, config)
         yield worker.startService()
         port = yield worker.services[0]._waitingForPort
         addr = port.getHost()
