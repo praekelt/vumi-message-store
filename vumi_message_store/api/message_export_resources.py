@@ -15,7 +15,6 @@ class ParameterError(Exception):
     """
     Exception raised while trying to parse a parameter.
     """
-    pass
 
 
 class MessageExportProxyResource(Resource):
