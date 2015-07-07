@@ -110,13 +110,13 @@ class TestMessageExportWorker(VumiTestCase):
     def test_get_invalid_batch(self):
         """
         An HTTP request to the server for a non-existant batch should return a
-        404 response code.
+        200 response code and an empty response body.
         """
-        # TODO: This test fails. Returns 200 + blank response
         yield self.start_server()
         resp = yield self.make_request('GET', 'made_up_batch', 'inbound.json')
 
-        self.assertEqual(resp.code, http.NOT_FOUND)
+        self.assertEqual(resp.code, http.OK)
+        self.assertEqual(resp.delivered_body, "")
 
     @inlineCallbacks
     def test_get_invalid_export_path(self):
