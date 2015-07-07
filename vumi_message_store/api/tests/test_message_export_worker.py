@@ -234,6 +234,14 @@ class TestMessageExportWorker(VumiTestCase):
             set([msg['message_id'] for msg in messages]),
             set([msg1['message_id'], msg2['message_id']]))
 
+    def test_connection_drop_during_page_iteration_stops(self):
+        """
+        If the connection drops while the server is iterating through index
+        pages then the iteration stops.
+        """
+    test_connection_drop_during_page_iteration_stops.skip = (
+        'TODO: This is difficult to test.')
+
     @inlineCallbacks
     def test_get_inbound_for_time_range(self):
         """
