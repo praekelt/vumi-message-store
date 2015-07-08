@@ -1,5 +1,5 @@
 """Vumi Message Store."""
 
-__version__ = "0.1.0a"
+__version__ = "0.1.0"
 
 __all__ = []
