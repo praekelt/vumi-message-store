@@ -396,6 +396,9 @@ class IndexPageWrapper(object):
     def __iter__(self):
         return (self._formatter(self._batch_id, r) for r in self._index_page)
 
+    def __len__(self):
+        return len(self._index_page)
+
 
 def key_with_ts_and_value_formatter(batch_id, result):
     value, key = result

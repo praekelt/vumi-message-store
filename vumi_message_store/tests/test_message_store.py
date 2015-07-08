@@ -801,6 +801,35 @@ class TestQueryMessageStore(VumiTestCase):
         self.assertEqual(list(keys_p2), all_keys[3:])
 
     @inlineCallbacks
+    def test_list_batch_inbound_keys_length(self):
+        """
+        When we ask for a list of inbound message keys, we get an IndexPage
+        containing the first page of results of the requested page length and
+        can ask for the next page which contains the expected number of
+        remaining results.
+        """
+        batch_id, _ = (
+            yield self.msg_seq_helper.create_inbound_message_sequence(
+                msg_count=5))
+
+        keys_p1 = yield self.store.list_batch_inbound_keys(batch_id, 3)
+        self.assertEqual(len(keys_p1), 3)
+
+        keys_p2 = yield keys_p1.next_page()
+        self.assertEqual(len(keys_p2), 2)
+
+    @inlineCallbacks
+    def test_list_batch_inbound_keys_empty_length(self):
+        """
+        When we ask for a list of inbound message keys before storing any
+        inbound messages for the batch, we get an IndexPage with length 0.
+        """
+        batch_id = yield self.backend.batch_start()
+
+        keys_p1 = yield self.store.list_batch_inbound_keys(batch_id, 3)
+        self.assertEqual(len(keys_p1), 0)
+
+    @inlineCallbacks
     def test_list_batch_inbound_keys_with_timestamps_range_start(self):
         """
         When we ask for a list of inbound message keys with timestamps, we can
