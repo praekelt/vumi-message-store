@@ -12,7 +12,7 @@ setup(
     packages=find_packages(),
     include_package_data=True,
     install_requires=[
-        "vumi",
+        "vumi>=0.5.21",
         "Twisted>=13.1.0",
     ],
     classifiers=[
