@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="vumi_message_store",
-    version="0.1.0",
+    version="0.1.1a0",
     url="http://github.com/praekelt/vumi-message-store",
     license="BSD",
     description="A persistent store for vumi messages.",
