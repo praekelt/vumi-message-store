@@ -34,13 +34,9 @@ class TestMessageExportWorker(VumiTestCase):
     def create_managers(self):
         riak = yield self.persistence_helper.get_riak_manager()
         redis = yield self.persistence_helper.get_redis_manager()
-        self.add_cleanup(self.close_managers, riak, redis)
+        self.add_cleanup(riak.close_manager)
+        self.add_cleanup(redis.close_manager)
         returnValue((riak, redis))
-
-    @inlineCallbacks
-    def close_managers(self, riak, redis):
-        yield riak.close_manager()
-        yield redis.close_manager()
 
     @inlineCallbacks
     def start_server(self):
