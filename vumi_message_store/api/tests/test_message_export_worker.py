@@ -4,7 +4,7 @@ import json
 from datetime import datetime
 from urllib import urlencode
 
-from twisted.internet.defer import inlineCallbacks
+from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.web import http
 
 from vumi_message_store.message_store import (
@@ -19,11 +19,28 @@ from vumi.tests.helpers import (
 
 class TestMessageExportWorker(VumiTestCase):
 
+    @inlineCallbacks
     def setUp(self):
         self.persistence_helper = self.add_helper(
             PersistenceHelper(use_riak=True))
         self.worker_helper = self.add_helper(WorkerHelper())
         self.msg_helper = self.add_helper(MessageHelper())
+
+        riak, redis = yield self.create_managers()
+        self.operational_store = OperationalMessageStore(riak, redis)
+        self.batch_manager = MessageStoreBatchManager(riak, redis)
+
+    @inlineCallbacks
+    def create_managers(self):
+        riak = yield self.persistence_helper.get_riak_manager()
+        redis = yield self.persistence_helper.get_redis_manager()
+        self.add_cleanup(self.close_managers, riak, redis)
+        returnValue((riak, redis))
+
+    @inlineCallbacks
+    def close_managers(self, riak, redis):
+        yield riak.close_manager()
+        yield redis.close_manager()
 
     @inlineCallbacks
     def start_server(self):
@@ -35,18 +52,12 @@ class TestMessageExportWorker(VumiTestCase):
         worker = yield self.worker_helper.get_worker(
             MessageExportWorker, config)
         yield worker.startService()
+
         port = yield worker.services[0]._waitingForPort
         addr = port.getHost()
-
         self.url = 'http://%s:%s' % (addr.host, addr.port)
 
-        self.query_store = worker.store
-        # TODO: There should be a better way to get the other message store
-        # interfaces.
-        riak = self.query_store.manager
-        redis = self.query_store.redis
-        self.operational_store = OperationalMessageStore(riak, redis)
-        self.batch_manager = MessageStoreBatchManager(riak, redis)
+        self.worker_backend = worker.store.riak_backend
 
         self.addCleanup(self.stop_server, port)
 
@@ -222,7 +233,7 @@ class TestMessageExportWorker(VumiTestCase):
         """
         yield self.start_server()
         # Poke at the riak backend to ensure multiple pages are transferred
-        self.query_store.riak_backend.DEFAULT_MAX_RESULTS = 1
+        self.worker_backend.DEFAULT_MAX_RESULTS = 1
         batch_id = yield self.make_batch(('foo', 'bar'))
         msg1 = yield self.make_inbound(batch_id, 'føø')
         msg2 = yield self.make_inbound(batch_id, 'føø')
