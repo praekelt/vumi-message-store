@@ -3,33 +3,31 @@ python:
   - "2.6"
   - "2.7"
 env:
-  # Test using Riak 1.4.
-  - RIAK_VERSION="1.4.12-1"
+  - RIAK_VERSION="1.4.12"
 matrix:
   include:
-    # Riak 2.0 sometimes doesn't have enough file descriptors:
-    # https://github.com/travis-ci/travis-ci/issues/3328
-    # Until that's fixed, don't build against new Riak.
-    # # Test against the Travis-provided version of Riak (currently 2.0.x).
-    # # This is a separate matrix inclusion to avoid spawning unnecessary builds.
-    # - python: "2.7"
-    #   env: RIAK_VERSION=current
+    # Test against Riak 2.1.1.
+    # This is a separate matrix inclusion to avoid spawning unnecessary builds.
+    - python: "2.7"
+      env: RIAK_VERSION="2.1.1"
     # Test on pypy without coverage, because it's unnecessary and very slow.
     - python: "pypy"
-      env: NO_COVERAGE="1" RIAK_VERSION="1.4.12-1"
+      env: NO_COVERAGE="1" RIAK_VERSION="1.4.12"
 
 before_install:
   # Set up an appropriate version of Riak.
-  - sudo utils/setup_travis_riak.sh "${RIAK_VERSION}"
+  - utils/setup_travis_riak.sh "${RIAK_VERSION}"
 install:
   - "pip install -r requirements.txt"
   - "pip install coveralls"
+
 before_script:
   # To see what version of Riak we're running and check that it's happy.
-  - riak version
-  - riak-admin member-status
+  - $HOME/riak/bin/riak version
+  - $HOME/riak/bin/riak-admin member-status
 script:
   - if [ -z "$NO_COVERAGE" ]; then COVERAGE_CMD="coverage run --source=vumi_message_store"; else COVERAGE_CMD=""; fi
   - VUMI_TEST_ASSERT_CLOSED=true $COVERAGE_CMD `which trial` vumi_message_store
+
 after_success:
   - if [ -z "$NO_COVERAGE" ]; then coveralls; fi
