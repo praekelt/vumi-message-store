@@ -794,7 +794,8 @@ class TestQueryMessageStore(VumiTestCase):
         all_keys = [(key, ts) for key, ts, _ in all_keys]
         keys_p1 = yield self.store.list_batch_inbound_keys_with_timestamps(
             batch_id, max_results=3)
-        # Paginated results are sorted by timestamp.
+        # Paginated results are sorted by descending timestamp.
+        all_keys.reverse()
         self.assertEqual(list(keys_p1), all_keys[:3])
 
         keys_p2 = yield keys_p1.next_page()
@@ -840,11 +841,12 @@ class TestQueryMessageStore(VumiTestCase):
         all_keys = [(key, ts) for key, ts, _ in all_keys]
         keys_p1 = yield self.store.list_batch_inbound_keys_with_timestamps(
             batch_id, start=all_keys[1][1], max_results=3)
-        # Paginated results are sorted by timestamp.
-        self.assertEqual(list(keys_p1), all_keys[1:4])
+        # Paginated results are sorted by descending timestamp.
+        all_keys.reverse()
+        self.assertEqual(list(keys_p1), all_keys[0:3])
 
         keys_p2 = yield keys_p1.next_page()
-        self.assertEqual(list(keys_p2), all_keys[4:])
+        self.assertEqual(list(keys_p2), all_keys[3:-1])
 
     @inlineCallbacks
     def test_list_batch_inbound_keys_with_timestamps_range_end(self):
@@ -857,11 +859,12 @@ class TestQueryMessageStore(VumiTestCase):
         all_keys = [(key, ts) for key, ts, _ in all_keys]
         keys_p1 = yield self.store.list_batch_inbound_keys_with_timestamps(
             batch_id, end=all_keys[-2][1], max_results=3)
-        # Paginated results are sorted by timestamp.
-        self.assertEqual(list(keys_p1), all_keys[0:3])
+        # Paginated results are sorted by descending timestamp.
+        all_keys.reverse()
+        self.assertEqual(list(keys_p1), all_keys[1:4])
 
         keys_p2 = yield keys_p1.next_page()
-        self.assertEqual(list(keys_p2), all_keys[3:-1])
+        self.assertEqual(list(keys_p2), all_keys[4:])
 
     @inlineCallbacks
     def test_list_batch_inbound_keys_with_timestamps_range(self):
@@ -874,7 +877,8 @@ class TestQueryMessageStore(VumiTestCase):
         all_keys = [(key, ts) for key, ts, _ in all_keys]
         keys_p1 = yield self.store.list_batch_inbound_keys_with_timestamps(
             batch_id, start=all_keys[1][1], end=all_keys[-2][1], max_results=2)
-        # Paginated results are sorted by timestamp.
+        # Paginated results are sorted by descending timestamp.
+        all_keys.reverse()
         self.assertEqual(list(keys_p1), all_keys[1:3])
 
         keys_p2 = yield keys_p1.next_page()
@@ -903,7 +907,8 @@ class TestQueryMessageStore(VumiTestCase):
         all_keys = [(key, ts) for key, ts, _ in all_keys]
         keys_p1 = yield self.store.list_batch_outbound_keys_with_timestamps(
             batch_id, max_results=3)
-        # Paginated results are sorted by timestamp.
+        # Paginated results are sorted by descending timestamp.
+        all_keys.reverse()
         self.assertEqual(list(keys_p1), all_keys[:3])
 
         keys_p2 = yield keys_p1.next_page()
@@ -920,11 +925,12 @@ class TestQueryMessageStore(VumiTestCase):
         all_keys = [(key, ts) for key, ts, _ in all_keys]
         keys_p1 = yield self.store.list_batch_outbound_keys_with_timestamps(
             batch_id, start=all_keys[1][1], max_results=3)
-        # Paginated results are sorted by timestamp.
-        self.assertEqual(list(keys_p1), all_keys[1:4])
+        # Paginated results are sorted by descending timestamp.
+        all_keys.reverse()
+        self.assertEqual(list(keys_p1), all_keys[0:3])
 
         keys_p2 = yield keys_p1.next_page()
-        self.assertEqual(list(keys_p2), all_keys[4:])
+        self.assertEqual(list(keys_p2), all_keys[3:-1])
 
     @inlineCallbacks
     def test_list_batch_outbound_keys_with_timestamps_range_end(self):
@@ -937,11 +943,12 @@ class TestQueryMessageStore(VumiTestCase):
         all_keys = [(key, ts) for key, ts, _ in all_keys]
         keys_p1 = yield self.store.list_batch_outbound_keys_with_timestamps(
             batch_id, end=all_keys[-2][1], max_results=3)
-        # Paginated results are sorted by timestamp.
-        self.assertEqual(list(keys_p1), all_keys[0:3])
+        # Paginated results are sorted by descending timestamp.
+        all_keys.reverse()
+        self.assertEqual(list(keys_p1), all_keys[1:4])
 
         keys_p2 = yield keys_p1.next_page()
-        self.assertEqual(list(keys_p2), all_keys[3:-1])
+        self.assertEqual(list(keys_p2), all_keys[4:])
 
     @inlineCallbacks
     def test_list_batch_outbound_keys_with_timestamps_range(self):
@@ -954,7 +961,8 @@ class TestQueryMessageStore(VumiTestCase):
         all_keys = [(key, ts) for key, ts, _ in all_keys]
         keys_p1 = yield self.store.list_batch_outbound_keys_with_timestamps(
             batch_id, start=all_keys[1][1], end=all_keys[-2][1], max_results=2)
-        # Paginated results are sorted by timestamp.
+        # Paginated results are sorted by descending timestamp.
+        all_keys.reverse()
         self.assertEqual(list(keys_p1), all_keys[1:3])
 
         keys_p2 = yield keys_p1.next_page()
@@ -982,7 +990,8 @@ class TestQueryMessageStore(VumiTestCase):
             yield self.msg_seq_helper.create_inbound_message_sequence())
         keys_p1 = yield self.store.list_batch_inbound_keys_with_addresses(
             batch_id, max_results=3)
-        # Paginated results are sorted by timestamp.
+        # Paginated results are sorted by descending timestamp.
+        all_keys.reverse()
         self.assertEqual(list(keys_p1), all_keys[:3])
 
         keys_p2 = yield keys_p1.next_page()
@@ -998,11 +1007,12 @@ class TestQueryMessageStore(VumiTestCase):
             yield self.msg_seq_helper.create_inbound_message_sequence())
         keys_p1 = yield self.store.list_batch_inbound_keys_with_addresses(
             batch_id, start=all_keys[1][1], max_results=3)
-        # Paginated results are sorted by timestamp.
-        self.assertEqual(list(keys_p1), all_keys[1:4])
+        # Paginated results are sorted by descending timestamp.
+        all_keys.reverse()
+        self.assertEqual(list(keys_p1), all_keys[0:3])
 
         keys_p2 = yield keys_p1.next_page()
-        self.assertEqual(list(keys_p2), all_keys[4:])
+        self.assertEqual(list(keys_p2), all_keys[3:-1])
 
     @inlineCallbacks
     def test_list_batch_inbound_keys_with_addresses_range_end(self):
@@ -1014,11 +1024,12 @@ class TestQueryMessageStore(VumiTestCase):
             yield self.msg_seq_helper.create_inbound_message_sequence())
         keys_p1 = yield self.store.list_batch_inbound_keys_with_addresses(
             batch_id, end=all_keys[-2][1], max_results=3)
-        # Paginated results are sorted by timestamp.
-        self.assertEqual(list(keys_p1), all_keys[0:3])
+        # Paginated results are sorted by descending timestamp.
+        all_keys.reverse()
+        self.assertEqual(list(keys_p1), all_keys[1:4])
 
         keys_p2 = yield keys_p1.next_page()
-        self.assertEqual(list(keys_p2), all_keys[3:-1])
+        self.assertEqual(list(keys_p2), all_keys[4:])
 
     @inlineCallbacks
     def test_list_batch_inbound_keys_with_addresses_range(self):
@@ -1030,7 +1041,8 @@ class TestQueryMessageStore(VumiTestCase):
             yield self.msg_seq_helper.create_inbound_message_sequence())
         keys_p1 = yield self.store.list_batch_inbound_keys_with_addresses(
             batch_id, start=all_keys[1][1], end=all_keys[-2][1], max_results=2)
-        # Paginated results are sorted by timestamp.
+        # Paginated results are sorted by descending timestamp.
+        all_keys.reverse()
         self.assertEqual(list(keys_p1), all_keys[1:3])
 
         keys_p2 = yield keys_p1.next_page()
@@ -1058,7 +1070,8 @@ class TestQueryMessageStore(VumiTestCase):
             yield self.msg_seq_helper.create_outbound_message_sequence())
         keys_p1 = yield self.store.list_batch_outbound_keys_with_addresses(
             batch_id, max_results=3)
-        # Paginated results are sorted by timestamp.
+        # Paginated results are sorted by descending timestamp.
+        all_keys.reverse()
         self.assertEqual(list(keys_p1), all_keys[:3])
 
         keys_p2 = yield keys_p1.next_page()
@@ -1074,11 +1087,12 @@ class TestQueryMessageStore(VumiTestCase):
             yield self.msg_seq_helper.create_outbound_message_sequence())
         keys_p1 = yield self.store.list_batch_outbound_keys_with_addresses(
             batch_id, start=all_keys[1][1], max_results=3)
-        # Paginated results are sorted by timestamp.
-        self.assertEqual(list(keys_p1), all_keys[1:4])
+        # Paginated results are sorted by descending timestamp.
+        all_keys.reverse()
+        self.assertEqual(list(keys_p1), all_keys[0:3])
 
         keys_p2 = yield keys_p1.next_page()
-        self.assertEqual(list(keys_p2), all_keys[4:])
+        self.assertEqual(list(keys_p2), all_keys[3:-1])
 
     @inlineCallbacks
     def test_list_batch_outbound_keys_with_addresses_range_end(self):
@@ -1090,11 +1104,12 @@ class TestQueryMessageStore(VumiTestCase):
             yield self.msg_seq_helper.create_outbound_message_sequence())
         keys_p1 = yield self.store.list_batch_outbound_keys_with_addresses(
             batch_id, end=all_keys[-2][1], max_results=3)
-        # Paginated results are sorted by timestamp.
-        self.assertEqual(list(keys_p1), all_keys[0:3])
+        # Paginated results are sorted by descending timestamp.
+        all_keys.reverse()
+        self.assertEqual(list(keys_p1), all_keys[1:4])
 
         keys_p2 = yield keys_p1.next_page()
-        self.assertEqual(list(keys_p2), all_keys[3:-1])
+        self.assertEqual(list(keys_p2), all_keys[4:])
 
     @inlineCallbacks
     def test_list_batch_outbound_keys_with_addresses_range(self):
@@ -1105,8 +1120,10 @@ class TestQueryMessageStore(VumiTestCase):
         batch_id, all_keys = (
             yield self.msg_seq_helper.create_outbound_message_sequence())
         keys_p1 = yield self.store.list_batch_outbound_keys_with_addresses(
-            batch_id, start=all_keys[1][1], end=all_keys[-2][1], max_results=2)
-        # Paginated results are sorted by timestamp.
+            batch_id, start=all_keys[1][1], end=all_keys[-2][1],
+            max_results=2)
+        # Paginated results are sorted by descending timestamp.
+        all_keys.reverse()
         self.assertEqual(list(keys_p1), all_keys[1:3])
 
         keys_p2 = yield keys_p1.next_page()
@@ -1121,178 +1138,6 @@ class TestQueryMessageStore(VumiTestCase):
         batch_id = yield self.backend.batch_start()
         keys_page = yield self.store.list_batch_outbound_keys_with_addresses(
             batch_id)
-        self.assertEqual(list(keys_page), [])
-
-    @inlineCallbacks
-    def test_list_batch_inbound_keys_with_addresses_reverse(self):
-        """
-        When we ask for a list of inbound message keys with addresses, we get
-        an IndexPageWrapper containing the first page of results and can ask
-        for following pages until all results are delivered.
-        """
-        batch_id, all_keys = (
-            yield self.msg_seq_helper.create_inbound_message_sequence())
-        keys_p1 = (
-            yield self.store.list_batch_inbound_keys_with_addresses_reverse(
-                batch_id, max_results=3))
-        # Paginated results are sorted by descending timestamp.
-        all_keys.reverse()
-        self.assertEqual(list(keys_p1), all_keys[:3])
-
-        keys_p2 = yield keys_p1.next_page()
-        self.assertEqual(list(keys_p2), all_keys[3:])
-
-    @inlineCallbacks
-    def test_list_batch_inbound_keys_with_addresses_reverse_range_start(self):
-        """
-        When we ask for a list of inbound message keys with addresses, we can
-        specify a start timestamp.
-        """
-        batch_id, all_keys = (
-            yield self.msg_seq_helper.create_inbound_message_sequence())
-        keys_p1 = (
-            yield self.store.list_batch_inbound_keys_with_addresses_reverse(
-                batch_id, start=all_keys[1][1], max_results=3))
-        # Paginated results are sorted by descending timestamp.
-        all_keys.reverse()
-        self.assertEqual(list(keys_p1), all_keys[0:3])
-
-        keys_p2 = yield keys_p1.next_page()
-        self.assertEqual(list(keys_p2), all_keys[3:-1])
-
-    @inlineCallbacks
-    def test_list_batch_inbound_keys_with_addresses_reverse_range_end(self):
-        """
-        When we ask for a list of inbound message keys with addresses, we can
-        specify an end timestamp.
-        """
-        batch_id, all_keys = (
-            yield self.msg_seq_helper.create_inbound_message_sequence())
-        keys_p1 = (
-            yield self.store.list_batch_inbound_keys_with_addresses_reverse(
-                batch_id, end=all_keys[-2][1], max_results=3))
-        # Paginated results are sorted by descending timestamp.
-        all_keys.reverse()
-        self.assertEqual(list(keys_p1), all_keys[1:4])
-
-        keys_p2 = yield keys_p1.next_page()
-        self.assertEqual(list(keys_p2), all_keys[4:])
-
-    @inlineCallbacks
-    def test_list_batch_inbound_keys_with_addresses_reverse_range(self):
-        """
-        When we ask for a list of inbound message keys with addresses, we can
-        specify both ends of the range.
-        """
-        batch_id, all_keys = (
-            yield self.msg_seq_helper.create_inbound_message_sequence())
-        keys_p1 = (
-            yield self.store.list_batch_inbound_keys_with_addresses_reverse(
-                batch_id, start=all_keys[1][1], end=all_keys[-2][1],
-                max_results=2))
-        # Paginated results are sorted by descending timestamp.
-        all_keys.reverse()
-        self.assertEqual(list(keys_p1), all_keys[1:3])
-
-        keys_p2 = yield keys_p1.next_page()
-        self.assertEqual(list(keys_p2), all_keys[3:-1])
-
-    @inlineCallbacks
-    def test_list_batch_inbound_keys_with_addresses_reverse_empty(self):
-        """
-        When we ask for a list of inbound message keys with addresses for an
-        empty batch, we get an empty IndexPageWrapper.
-        """
-        batch_id = yield self.backend.batch_start()
-        keys_page = (
-            yield self.store.list_batch_inbound_keys_with_addresses_reverse(
-                batch_id))
-        self.assertEqual(list(keys_page), [])
-
-    @inlineCallbacks
-    def test_list_batch_outbound_keys_with_addresses_reverse(self):
-        """
-        When we ask for a list of outbound message keys with addresses, we get
-        an IndexPageWrapper containing the first page of results and can ask
-        for following pages until all results are delivered.
-        """
-        batch_id, all_keys = (
-            yield self.msg_seq_helper.create_outbound_message_sequence())
-        keys_p1 = (
-            yield self.store.list_batch_outbound_keys_with_addresses_reverse(
-                batch_id, max_results=3))
-        # Paginated results are sorted by descending timestamp.
-        all_keys.reverse()
-        self.assertEqual(list(keys_p1), all_keys[:3])
-
-        keys_p2 = yield keys_p1.next_page()
-        self.assertEqual(list(keys_p2), all_keys[3:])
-
-    @inlineCallbacks
-    def test_list_batch_outbound_keys_with_addresses_reverse_range_start(self):
-        """
-        When we ask for a list of outbound message keys with addresses, we can
-        specify a start timestamp.
-        """
-        batch_id, all_keys = (
-            yield self.msg_seq_helper.create_outbound_message_sequence())
-        keys_p1 = (
-            yield self.store.list_batch_outbound_keys_with_addresses_reverse(
-                batch_id, start=all_keys[1][1], max_results=3))
-        # Paginated results are sorted by descending timestamp.
-        all_keys.reverse()
-        self.assertEqual(list(keys_p1), all_keys[0:3])
-
-        keys_p2 = yield keys_p1.next_page()
-        self.assertEqual(list(keys_p2), all_keys[3:-1])
-
-    @inlineCallbacks
-    def test_list_batch_outbound_keys_with_addresses_reverse_range_end(self):
-        """
-        When we ask for a list of outbound message keys with addresses, we can
-        specify an end timestamp.
-        """
-        batch_id, all_keys = (
-            yield self.msg_seq_helper.create_outbound_message_sequence())
-        keys_p1 = (
-            yield self.store.list_batch_outbound_keys_with_addresses_reverse(
-                batch_id, end=all_keys[-2][1], max_results=3))
-        # Paginated results are sorted by descending timestamp.
-        all_keys.reverse()
-        self.assertEqual(list(keys_p1), all_keys[1:4])
-
-        keys_p2 = yield keys_p1.next_page()
-        self.assertEqual(list(keys_p2), all_keys[4:])
-
-    @inlineCallbacks
-    def test_list_batch_outbound_keys_with_addresses_reverse_range(self):
-        """
-        When we ask for a list of outbound message keys with addresses, we can
-        specify both ends of the range.
-        """
-        batch_id, all_keys = (
-            yield self.msg_seq_helper.create_outbound_message_sequence())
-        keys_p1 = (
-            yield self.store.list_batch_outbound_keys_with_addresses_reverse(
-                batch_id, start=all_keys[1][1], end=all_keys[-2][1],
-                max_results=2))
-        # Paginated results are sorted by descending timestamp.
-        all_keys.reverse()
-        self.assertEqual(list(keys_p1), all_keys[1:3])
-
-        keys_p2 = yield keys_p1.next_page()
-        self.assertEqual(list(keys_p2), all_keys[3:-1])
-
-    @inlineCallbacks
-    def test_list_batch_outbound_keys_with_addresses_reverse_empty(self):
-        """
-        When we ask for a list of outbound message keys with addresses for an
-        empty batch, we get an empty IndexPageWrapper.
-        """
-        batch_id = yield self.backend.batch_start()
-        keys_page = (
-            yield self.store.list_batch_outbound_keys_with_addresses_reverse(
-                batch_id))
         self.assertEqual(list(keys_page), [])
 
     @inlineCallbacks
