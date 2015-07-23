@@ -140,7 +140,7 @@ class MessageExportProxyResource(Resource):
 class InboundResource(MessageExportProxyResource):
 
     def get_keys_page(self, message_store, batch_id, start, end):
-        return message_store.list_batch_inbound_keys_with_addresses_reverse(
+        return message_store.list_batch_inbound_keys_with_addresses(
             batch_id, start=start, end=end)
 
     def get_message_keys(self, keys_page):
@@ -153,7 +153,7 @@ class InboundResource(MessageExportProxyResource):
 class OutboundResource(MessageExportProxyResource):
 
     def get_keys_page(self, message_store, batch_id, start, end):
-        return message_store.list_batch_outbound_keys_with_addresses_reverse(
+        return message_store.list_batch_outbound_keys_with_addresses(
             batch_id, start=start, end=end)
 
     def get_message_keys(self, keys_page):
