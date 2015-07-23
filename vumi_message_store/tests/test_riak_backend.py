@@ -712,7 +712,6 @@ class RiakBackendTestMixin(object):
         keys_p1 = yield self.backend.list_batch_inbound_keys_with_timestamps(
             batch_id, max_results=3)
         # Paginated results are sorted by descending timestamp.
-        all_keys.reverse()
         self.assertEqual(list(keys_p1), all_keys[:3])
 
         keys_p2 = yield keys_p1.next_page()
@@ -728,9 +727,8 @@ class RiakBackendTestMixin(object):
             yield self.msg_seq_helper.create_inbound_message_sequence())
         all_keys = [(key, ts) for key, ts, _ in all_keys]
         keys_p1 = yield self.backend.list_batch_inbound_keys_with_timestamps(
-            batch_id, start=all_keys[1][1], max_results=3)
+            batch_id, start=all_keys[-2][1], max_results=3)
         # Paginated results are sorted by descending timestamp.
-        all_keys.reverse()
         self.assertEqual(list(keys_p1), all_keys[0:3])
 
         keys_p2 = yield keys_p1.next_page()
@@ -746,9 +744,8 @@ class RiakBackendTestMixin(object):
             yield self.msg_seq_helper.create_inbound_message_sequence())
         all_keys = [(key, ts) for key, ts, _ in all_keys]
         keys_p1 = yield self.backend.list_batch_inbound_keys_with_timestamps(
-            batch_id, end=all_keys[-2][1], max_results=3)
+            batch_id, end=all_keys[1][1], max_results=3)
         # Paginated results are sorted by descending timestamp.
-        all_keys.reverse()
         self.assertEqual(list(keys_p1), all_keys[1:4])
 
         keys_p2 = yield keys_p1.next_page()
@@ -764,9 +761,8 @@ class RiakBackendTestMixin(object):
             yield self.msg_seq_helper.create_inbound_message_sequence())
         all_keys = [(key, ts) for key, ts, _ in all_keys]
         keys_p1 = yield self.backend.list_batch_inbound_keys_with_timestamps(
-            batch_id, start=all_keys[1][1], end=all_keys[-2][1], max_results=2)
+            batch_id, start=all_keys[-2][1], end=all_keys[1][1], max_results=2)
         # Paginated results are sorted by descending timestamp.
-        all_keys.reverse()
         self.assertEqual(list(keys_p1), all_keys[1:3])
 
         keys_p2 = yield keys_p1.next_page()
@@ -796,7 +792,6 @@ class RiakBackendTestMixin(object):
         keys_p1 = yield self.backend.list_batch_outbound_keys_with_timestamps(
             batch_id, max_results=3)
         # Paginated results are sorted by descending timestamp.
-        all_keys.reverse()
         self.assertEqual(list(keys_p1), all_keys[:3])
 
         keys_p2 = yield keys_p1.next_page()
@@ -812,9 +807,8 @@ class RiakBackendTestMixin(object):
             yield self.msg_seq_helper.create_outbound_message_sequence())
         all_keys = [(key, ts) for key, ts, _ in all_keys]
         keys_p1 = yield self.backend.list_batch_outbound_keys_with_timestamps(
-            batch_id, start=all_keys[1][1], max_results=3)
+            batch_id, start=all_keys[-2][1], max_results=3)
         # Paginated results are sorted by descending timestamp.
-        all_keys.reverse()
         self.assertEqual(list(keys_p1), all_keys[0:3])
 
         keys_p2 = yield keys_p1.next_page()
@@ -830,9 +824,8 @@ class RiakBackendTestMixin(object):
             yield self.msg_seq_helper.create_outbound_message_sequence())
         all_keys = [(key, ts) for key, ts, _ in all_keys]
         keys_p1 = yield self.backend.list_batch_outbound_keys_with_timestamps(
-            batch_id, end=all_keys[-2][1], max_results=3)
+            batch_id, end=all_keys[1][1], max_results=3)
         # Paginated results are sorted by descending timestamp.
-        all_keys.reverse()
         self.assertEqual(list(keys_p1), all_keys[1:4])
 
         keys_p2 = yield keys_p1.next_page()
@@ -848,9 +841,8 @@ class RiakBackendTestMixin(object):
             yield self.msg_seq_helper.create_outbound_message_sequence())
         all_keys = [(key, ts) for key, ts, _ in all_keys]
         keys_p1 = yield self.backend.list_batch_outbound_keys_with_timestamps(
-            batch_id, start=all_keys[1][1], end=all_keys[-2][1], max_results=2)
+            batch_id, start=all_keys[-2][1], end=all_keys[1][1], max_results=2)
         # Paginated results are sorted by descending timestamp.
-        all_keys.reverse()
         self.assertEqual(list(keys_p1), all_keys[1:3])
 
         keys_p2 = yield keys_p1.next_page()
@@ -879,7 +871,6 @@ class RiakBackendTestMixin(object):
         keys_p1 = yield self.backend.list_batch_inbound_keys_with_addresses(
             batch_id, max_results=3)
         # Paginated results are sorted by descending timestamp.
-        all_keys.reverse()
         self.assertEqual(list(keys_p1), all_keys[:3])
 
         keys_p2 = yield keys_p1.next_page()
@@ -894,9 +885,8 @@ class RiakBackendTestMixin(object):
         batch_id, all_keys = (
             yield self.msg_seq_helper.create_inbound_message_sequence())
         keys_p1 = yield self.backend.list_batch_inbound_keys_with_addresses(
-            batch_id, start=all_keys[1][1], max_results=3)
+            batch_id, start=all_keys[-2][1], max_results=3)
         # Paginated results are sorted by descending timestamp.
-        all_keys.reverse()
         self.assertEqual(list(keys_p1), all_keys[0:3])
 
         keys_p2 = yield keys_p1.next_page()
@@ -911,9 +901,8 @@ class RiakBackendTestMixin(object):
         batch_id, all_keys = (
             yield self.msg_seq_helper.create_inbound_message_sequence())
         keys_p1 = yield self.backend.list_batch_inbound_keys_with_addresses(
-            batch_id, end=all_keys[-2][1], max_results=3)
+            batch_id, end=all_keys[1][1], max_results=3)
         # Paginated results are sorted by descending timestamp.
-        all_keys.reverse()
         self.assertEqual(list(keys_p1), all_keys[1:4])
 
         keys_p2 = yield keys_p1.next_page()
@@ -928,9 +917,8 @@ class RiakBackendTestMixin(object):
         batch_id, all_keys = (
             yield self.msg_seq_helper.create_inbound_message_sequence())
         keys_p1 = yield self.backend.list_batch_inbound_keys_with_addresses(
-            batch_id, start=all_keys[1][1], end=all_keys[-2][1], max_results=2)
+            batch_id, start=all_keys[-2][1], end=all_keys[1][1], max_results=2)
         # Paginated results are sorted by descending timestamp.
-        all_keys.reverse()
         self.assertEqual(list(keys_p1), all_keys[1:3])
 
         keys_p2 = yield keys_p1.next_page()
@@ -959,7 +947,6 @@ class RiakBackendTestMixin(object):
         keys_p1 = yield self.backend.list_batch_outbound_keys_with_addresses(
             batch_id, max_results=3)
         # Paginated results are sorted by descending timestamp.
-        all_keys.reverse()
         self.assertEqual(list(keys_p1), all_keys[:3])
 
         keys_p2 = yield keys_p1.next_page()
@@ -974,9 +961,8 @@ class RiakBackendTestMixin(object):
         batch_id, all_keys = (
             yield self.msg_seq_helper.create_outbound_message_sequence())
         keys_p1 = yield self.backend.list_batch_outbound_keys_with_addresses(
-            batch_id, start=all_keys[1][1], max_results=3)
+            batch_id, start=all_keys[-2][1], max_results=3)
         # Paginated results are sorted by descending timestamp.
-        all_keys.reverse()
         self.assertEqual(list(keys_p1), all_keys[0:3])
 
         keys_p2 = yield keys_p1.next_page()
@@ -991,9 +977,8 @@ class RiakBackendTestMixin(object):
         batch_id, all_keys = (
             yield self.msg_seq_helper.create_outbound_message_sequence())
         keys_p1 = yield self.backend.list_batch_outbound_keys_with_addresses(
-            batch_id, end=all_keys[-2][1], max_results=3)
+            batch_id, end=all_keys[1][1], max_results=3)
         # Paginated results are sorted by descending timestamp.
-        all_keys.reverse()
         self.assertEqual(list(keys_p1), all_keys[1:4])
 
         keys_p2 = yield keys_p1.next_page()
@@ -1008,9 +993,8 @@ class RiakBackendTestMixin(object):
         batch_id, all_keys = (
             yield self.msg_seq_helper.create_outbound_message_sequence())
         keys_p1 = yield self.backend.list_batch_outbound_keys_with_addresses(
-            batch_id, start=all_keys[1][1], end=all_keys[-2][1], max_results=2)
+            batch_id, start=all_keys[-2][1], end=all_keys[1][1], max_results=2)
         # Paginated results are sorted by descending timestamp.
-        all_keys.reverse()
         self.assertEqual(list(keys_p1), all_keys[1:3])
 
         keys_p2 = yield keys_p1.next_page()

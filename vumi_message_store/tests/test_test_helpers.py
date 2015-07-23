@@ -62,7 +62,7 @@ class TestMessageSequenceHelper(VumiTestCase):
     def test_inbound_delay_seconds(self):
         """
         When creating an inbound message sequence, the messages are returned in
-        ascending timestamp order and the delay between each timestamp is
+        descending timestamp order and the delay between each timestamp is
         correct
         """
         batch_id, all_keys = (
@@ -70,14 +70,14 @@ class TestMessageSequenceHelper(VumiTestCase):
                 msg_count=3, delay_seconds=2))
 
         timestamps = [parse_vumi_date(ts) for _, ts, _ in all_keys]
-        self.assertEqual(timestamps[1] - timestamps[0], timedelta(seconds=2))
-        self.assertEqual(timestamps[2] - timestamps[1], timedelta(seconds=2))
+        self.assertEqual(timestamps[0] - timestamps[1], timedelta(seconds=2))
+        self.assertEqual(timestamps[1] - timestamps[2], timedelta(seconds=2))
 
     @inlineCallbacks
     def test_outbound_delay_seconds(self):
         """
         When creating an outbound message sequence, the messages are returned
-        in ascending timestamp order and the delay between each timestamp is
+        in descending timestamp order and the delay between each timestamp is
         correct
         """
         batch_id, all_keys = (
@@ -85,5 +85,5 @@ class TestMessageSequenceHelper(VumiTestCase):
                 msg_count=3, delay_seconds=2))
 
         timestamps = [parse_vumi_date(ts) for _, ts, _ in all_keys]
-        self.assertEqual(timestamps[1] - timestamps[0], timedelta(seconds=2))
-        self.assertEqual(timestamps[2] - timestamps[1], timedelta(seconds=2))
+        self.assertEqual(timestamps[0] - timestamps[1], timedelta(seconds=2))
+        self.assertEqual(timestamps[1] - timestamps[2], timedelta(seconds=2))

@@ -37,10 +37,9 @@ class MessageSequenceHelper(object):
         """
         batch_id = yield self._backend.batch_start()
         all_keys = []
-        start = (datetime.utcnow().replace(microsecond=0) -
-                 timedelta(seconds=msg_count * delay_seconds))
+        start = datetime.utcnow().replace(microsecond=0)
         for i in xrange(msg_count):
-            timestamp = start + timedelta(seconds=i * delay_seconds)
+            timestamp = start - timedelta(seconds=i * delay_seconds)
             addr = "addr%s" % (i,)
             msg = self._msg_helper.make_inbound(
                 "Message %s" % (i,), timestamp=timestamp, from_addr=addr)
@@ -69,10 +68,9 @@ class MessageSequenceHelper(object):
         """
         batch_id = yield self._backend.batch_start()
         all_keys = []
-        start = (datetime.utcnow().replace(microsecond=0) -
-                 timedelta(seconds=msg_count * delay_seconds))
+        start = datetime.utcnow().replace(microsecond=0)
         for i in xrange(msg_count):
-            timestamp = start + timedelta(seconds=i * delay_seconds)
+            timestamp = start - timedelta(seconds=i * delay_seconds)
             addr = "addr%s" % (i,)
             msg = self._msg_helper.make_inbound(
                 "Message %s" % (i,), timestamp=timestamp, to_addr=addr)
