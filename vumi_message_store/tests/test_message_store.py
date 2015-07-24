@@ -16,10 +16,6 @@ from vumi_message_store.message_store import (
 from vumi_message_store.tests.helpers import MessageSequenceHelper
 
 
-# TODO: Better way to test indexes. Currently indexes are retrieved
-#       using ._riak_object.get_indexes().
-
-
 class TestMessageStoreBatchManager(VumiTestCase):
 
     @inlineCallbacks
@@ -263,8 +259,8 @@ class TestOperationalMessageStore(VumiTestCase):
     def test_add_inbound_message_with_batch_id(self):
         """
         When an inbound message is added with a batch identifier, that batch
-        identifier is stored with it and indexed. Additionally, it is added to
-        the batch info cache.
+        identifier is stored with it. Additionally, it is added to the batch
+        info cache.
         """
         yield self.bi_cache.batch_start("mybatch")
         msg = self.msg_helper.make_inbound("apples")
@@ -377,8 +373,8 @@ class TestOperationalMessageStore(VumiTestCase):
     def test_add_outbound_message_with_batch_id(self):
         """
         When an outbound message is added with a batch identifier, that batch
-        identifier is stored with it and indexed. Additionally, it is added to
-        the batch info cache.
+        identifier is stored with it. Additionally, it is added to the batch
+        info cache.
         """
         yield self.bi_cache.batch_start("mybatch")
         msg = self.msg_helper.make_outbound("apples")
@@ -468,13 +464,6 @@ class TestOperationalMessageStore(VumiTestCase):
         stored_event = yield self.backend.get_raw_event(ack["event_id"])
         self.assertEqual(stored_event.event, ack)
 
-        # Make sure we're writing the right indexes.
-        self.assertEqual(stored_event._riak_object.get_indexes(), set([
-            ("message_bin", ack["user_message_id"]),
-            ("message_with_status_bin",
-             "%s$%s$%s" % (ack["user_message_id"], ack["timestamp"], "ack")),
-        ]))
-
     @inlineCallbacks
     def test_add_ack_event_no_stored_outbound(self):
         """
@@ -490,19 +479,11 @@ class TestOperationalMessageStore(VumiTestCase):
         stored_event = yield self.backend.get_raw_event(ack["event_id"])
         self.assertEqual(stored_event.event, ack)
 
-        # Make sure we're writing the right indexes.
-        self.assertEqual(stored_event._riak_object.get_indexes(), set([
-            ("message_bin", ack["user_message_id"]),
-            ("message_with_status_bin",
-             "%s$%s$%s" % (ack["user_message_id"], ack["timestamp"], "ack")),
-        ]))
-
     @inlineCallbacks
     def test_add_ack_event_with_batch_id(self):
         """
         When an event is added with a batch identifier, that batch identifier
-        is stored with it and indexed. Additionally, it is added to the batch
-        info cache.
+        is stored with it. Additionally, it is added to the batch info cache.
         """
         yield self.bi_cache.batch_start("mybatch")
         msg = self.msg_helper.make_outbound("apples")
@@ -558,8 +539,7 @@ class TestOperationalMessageStore(VumiTestCase):
     @inlineCallbacks
     def test_add_delivery_report_event(self):
         """
-        When a delivery report event is added, delivery status is included in
-        the indexed status.
+        When a delivery report event is added it is stored in Riak.
         """
         msg = self.msg_helper.make_outbound("apples")
         dr = self.msg_helper.make_delivery_report(msg)
@@ -569,14 +549,6 @@ class TestOperationalMessageStore(VumiTestCase):
         yield self.backend.add_event(dr)
         stored_event = yield self.backend.get_raw_event(dr["event_id"])
         self.assertEqual(stored_event.event, dr)
-
-        # Make sure we're writing the right indexes.
-        self.assertEqual(stored_event._riak_object.get_indexes(), set([
-            ("message_bin", dr["user_message_id"]),
-            ("message_with_status_bin",
-             "%s$%s$%s" % (dr["user_message_id"], dr["timestamp"],
-                           "delivery_report.delivered")),
-        ]))
 
     @inlineCallbacks
     def test_add_ack_event_again(self):
