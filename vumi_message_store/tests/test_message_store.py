@@ -1,10 +1,9 @@
 """
 Tests for vumi_message_store.message_store.
 """
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from twisted.internet.defer import inlineCallbacks
-from vumi.message import format_vumi_date
 from vumi.tests.helpers import VumiTestCase, MessageHelper, PersistenceHelper
 from zope.interface.verify import verifyObject
 
@@ -731,22 +730,11 @@ class TestQueryMessageStore(VumiTestCase):
         containing the first page of results and can ask for following pages
         until all results are delivered.
         """
-        batch_id = yield self.backend.batch_start()
-        msg = self.msg_helper.make_outbound("pears")
-        yield self.backend.add_outbound_message(msg, batch_ids=[batch_id])
-        events = [
-            self.msg_helper.make_ack(msg),
-            self.msg_helper.make_delivery_report(msg),
-            self.msg_helper.make_delivery_report(msg),
-            self.msg_helper.make_delivery_report(msg),
-            self.msg_helper.make_delivery_report(msg),
-        ]
-        for event in events:
-            yield self.backend.add_event(event)
-        all_keys = sorted(event["event_id"] for event in events)
+        batch_id, msg_id, all_keys = (
+            yield self.msg_seq_helper.create_ack_event_sequence())
+        all_keys = sorted(key for key, _, _ in all_keys)
 
-        keys_p1 = yield self.store.list_message_event_keys(
-            msg["message_id"], 3)
+        keys_p1 = yield self.store.list_message_event_keys(msg_id, 3)
         # Paginated results are sorted by key.
         self.assertEqual(sorted(keys_p1), all_keys[:3])
 
@@ -1102,33 +1090,13 @@ class TestQueryMessageStore(VumiTestCase):
         IndexPageWrapper containing the first page of results and can ask for
         following pages until all results are delivered.
         """
-        batch_id = yield self.backend.batch_start()
-        start = datetime.utcnow() - timedelta(seconds=10)
-        msg = self.msg_helper.make_outbound("hello", timestamp=start)
-        yield self.backend.add_outbound_message(msg, batch_ids=[batch_id])
-        ack = self.msg_helper.make_ack(msg, timestamp=start)
-        yield self.backend.add_event(ack)
-        drs = [
-            self.msg_helper.make_delivery_report(
-                msg, timestamp=(start + timedelta(seconds=1))),
-            self.msg_helper.make_delivery_report(
-                msg, timestamp=(start + timedelta(seconds=2))),
-            self.msg_helper.make_delivery_report(
-                msg, timestamp=(start + timedelta(seconds=3))),
-            self.msg_helper.make_delivery_report(
-                msg, timestamp=(start + timedelta(seconds=4))),
-        ]
-        all_keys = [
-            (ack["event_id"], format_vumi_date(ack["timestamp"]), "ack")]
-        for dr in drs:
-            yield self.backend.add_event(dr)
-            all_keys.append(
-                (dr["event_id"], format_vumi_date(dr["timestamp"]),
-                 "delivery_report.delivered"))
+        batch_id, msg_id, all_keys = (
+            yield self.msg_seq_helper.create_ack_event_sequence())
 
         keys_p1 = yield self.store.list_message_event_keys_with_statuses(
-            msg["message_id"], max_results=3)
-        # Paginated results are sorted by timestamp.
+            msg_id, max_results=3)
+        # Paginated results are sorted by ascending timestamp.
+        all_keys.reverse()
         self.assertEqual(list(keys_p1), all_keys[:3])
 
         keys_p2 = yield keys_p1.next_page()

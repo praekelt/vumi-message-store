@@ -81,3 +81,34 @@ class MessageSequenceHelper(object):
                              addr))                        # Address
 
         returnValue((batch_id, all_keys))
+
+    @inlineCallbacks
+    def create_ack_event_sequence(self, event_count=5, delay_seconds=1):
+        """
+        Generate a sequence of events in a new batch with a test message and
+        add them to the backend.
+
+        :param event_count:
+            The number of events to create
+        :param delay_seconds:
+            The delay in seconds between the timestamps of sequential events
+
+        :returns:
+            The batch id of the new batch, the message id of the test message,
+            and a list of tuples describing each event in the form
+            (key, timestamp, status).
+        """
+        batch_id = yield self._backend.batch_start()
+        msg = self._msg_helper.make_outbound("pears")
+        all_keys = []
+        start = datetime.utcnow().replace(microsecond=0)
+        for i in xrange(event_count):
+            timestamp = start - timedelta(seconds=i * delay_seconds)
+            ack = self._msg_helper.make_ack(msg, timestamp=timestamp)
+            yield self._backend.add_event(ack, batch_ids=[batch_id])
+
+            all_keys.append((ack["event_id"],              # Key
+                             format_vumi_date(timestamp),  # Timestamp
+                             ack["event_type"]))           # Status
+
+        returnValue((batch_id, msg["message_id"], all_keys))
