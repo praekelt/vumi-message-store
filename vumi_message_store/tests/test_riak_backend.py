@@ -512,6 +512,48 @@ class RiakBackendTestMixin(object):
         ]))
 
     @inlineCallbacks
+    def test_add_delivery_report_event(self):
+        """
+        When a delivery report event is added, delivery status is included in
+        the indexed status.
+        """
+        events = self.manager.proxy(Event)
+        msg = self.msg_helper.make_outbound("apples")
+        dr = self.msg_helper.make_delivery_report(msg)
+        stored_event = yield events.load(dr["event_id"])
+        self.assertEqual(stored_event, None)
+
+        yield self.backend.add_event(dr)
+        stored_event = yield events.load(dr["event_id"])
+        self.assertEqual(stored_event.event, dr)
+
+        # Make sure we're writing the right indexes.
+        self.assertEqual(stored_event._riak_object.get_indexes(), set([
+            ("message_bin", dr["user_message_id"]),
+            ("message_with_status_bin",
+             "%s$%s$%s" % (dr["user_message_id"], dr["timestamp"],
+                           "delivery_report.delivered")),
+        ]))
+
+    @inlineCallbacks
+    def test_add_ack_event_again(self):
+        """
+        When an event is added, it overwrites any existing version in Riak.
+        """
+        events = self.manager.proxy(Event)
+        msg = self.msg_helper.make_outbound("apples")
+        ack = self.msg_helper.make_ack(msg)
+        yield self.backend.add_event(ack)
+        old_stored_event = yield events.load(ack["event_id"])
+        self.assertEqual(old_stored_event.event, ack)
+
+        ack["helper_metadata"]["fruit"] = {"type": "pomaceous"}
+        yield self.backend.add_event(ack)
+        new_stored_event = yield events.load(ack["event_id"])
+        self.assertEqual(new_stored_event.event, ack)
+        self.assertNotEqual(new_stored_event.event, old_stored_event.event)
+
+    @inlineCallbacks
     def test_add_ack_event_with_batch_id(self):
         """
         When an event is added with a batch identifier, that batch identifier
@@ -597,48 +639,6 @@ class RiakBackendTestMixin(object):
             ("batches_with_statuses_reverse_bin",
              "%s$%s$%s" % ("yourbatch", reverse_ts, "ack")),
         ]))
-
-    @inlineCallbacks
-    def test_add_delivery_report_event(self):
-        """
-        When a delivery report event is added, delivery status is included in
-        the indexed status.
-        """
-        events = self.manager.proxy(Event)
-        msg = self.msg_helper.make_outbound("apples")
-        dr = self.msg_helper.make_delivery_report(msg)
-        stored_event = yield events.load(dr["event_id"])
-        self.assertEqual(stored_event, None)
-
-        yield self.backend.add_event(dr)
-        stored_event = yield events.load(dr["event_id"])
-        self.assertEqual(stored_event.event, dr)
-
-        # Make sure we're writing the right indexes.
-        self.assertEqual(stored_event._riak_object.get_indexes(), set([
-            ("message_bin", dr["user_message_id"]),
-            ("message_with_status_bin",
-             "%s$%s$%s" % (dr["user_message_id"], dr["timestamp"],
-                           "delivery_report.delivered")),
-        ]))
-
-    @inlineCallbacks
-    def test_add_ack_event_again(self):
-        """
-        When an event is added, it overwrites any existing version in Riak.
-        """
-        events = self.manager.proxy(Event)
-        msg = self.msg_helper.make_outbound("apples")
-        ack = self.msg_helper.make_ack(msg)
-        yield self.backend.add_event(ack)
-        old_stored_event = yield events.load(ack["event_id"])
-        self.assertEqual(old_stored_event.event, ack)
-
-        ack["helper_metadata"]["fruit"] = {"type": "pomaceous"}
-        yield self.backend.add_event(ack)
-        new_stored_event = yield events.load(ack["event_id"])
-        self.assertEqual(new_stored_event.event, ack)
-        self.assertNotEqual(new_stored_event.event, old_stored_event.event)
 
     @inlineCallbacks
     def test_get_raw_event(self):

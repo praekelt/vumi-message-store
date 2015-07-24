@@ -455,7 +455,6 @@ class TestOperationalMessageStore(VumiTestCase):
         When an event is added, it is stored in Riak.
         """
         msg = self.msg_helper.make_outbound("apples")
-        yield self.backend.add_outbound_message(msg)
         ack = self.msg_helper.make_ack(msg)
         stored_event = yield self.backend.get_raw_event(ack["event_id"])
         self.assertEqual(stored_event, None)
@@ -465,19 +464,35 @@ class TestOperationalMessageStore(VumiTestCase):
         self.assertEqual(stored_event.event, ack)
 
     @inlineCallbacks
-    def test_add_ack_event_no_stored_outbound(self):
+    def test_add_delivery_report_event(self):
         """
-        When an event is added, it is stored in Riak even if there is no
-        outbound message to link it to.
+        When a delivery report event is added it is stored in Riak.
+        """
+        msg = self.msg_helper.make_outbound("apples")
+        dr = self.msg_helper.make_delivery_report(msg)
+        stored_event = yield self.backend.get_raw_event(dr["event_id"])
+        self.assertEqual(stored_event, None)
+
+        yield self.backend.add_event(dr)
+        stored_event = yield self.backend.get_raw_event(dr["event_id"])
+        self.assertEqual(stored_event.event, dr)
+
+    @inlineCallbacks
+    def test_add_ack_event_again(self):
+        """
+        When an event is added, it overwrites any existing version in Riak.
         """
         msg = self.msg_helper.make_outbound("apples")
         ack = self.msg_helper.make_ack(msg)
-        stored_event = yield self.backend.get_raw_event(ack["event_id"])
-        self.assertEqual(stored_event, None)
+        yield self.backend.add_event(ack)
+        old_stored_event = yield self.backend.get_raw_event(ack["event_id"])
+        self.assertEqual(old_stored_event.event, ack)
 
-        yield self.store.add_event(ack)
-        stored_event = yield self.backend.get_raw_event(ack["event_id"])
-        self.assertEqual(stored_event.event, ack)
+        ack["helper_metadata"]["fruit"] = {"type": "pomaceous"}
+        yield self.backend.add_event(ack)
+        new_stored_event = yield self.backend.get_raw_event(ack["event_id"])
+        self.assertEqual(new_stored_event.event, ack)
+        self.assertNotEqual(new_stored_event.event, old_stored_event.event)
 
     @inlineCallbacks
     def test_add_ack_event_with_batch_id(self):
@@ -516,7 +531,7 @@ class TestOperationalMessageStore(VumiTestCase):
         self.assertEqual(yourkeys, [ack["event_id"]])
 
     @inlineCallbacks
-    def test_add_event_to_new_batch(self):
+    def test_add_ack_event_to_new_batch(self):
         """
         When an existing event is added with a new batch identifier, it belongs
         to the new batch as well as batches it already belonged to.
@@ -535,37 +550,6 @@ class TestOperationalMessageStore(VumiTestCase):
         self.assertEqual(mykeys, [ack["event_id"]])
         yourkeys = yield self.bi_cache.list_event_keys("yourbatch")
         self.assertEqual(yourkeys, [ack["event_id"]])
-
-    @inlineCallbacks
-    def test_add_delivery_report_event(self):
-        """
-        When a delivery report event is added it is stored in Riak.
-        """
-        msg = self.msg_helper.make_outbound("apples")
-        dr = self.msg_helper.make_delivery_report(msg)
-        stored_event = yield self.backend.get_raw_event(dr["event_id"])
-        self.assertEqual(stored_event, None)
-
-        yield self.backend.add_event(dr)
-        stored_event = yield self.backend.get_raw_event(dr["event_id"])
-        self.assertEqual(stored_event.event, dr)
-
-    @inlineCallbacks
-    def test_add_ack_event_again(self):
-        """
-        When an event is added, it overwrites any existing version in Riak.
-        """
-        msg = self.msg_helper.make_outbound("apples")
-        ack = self.msg_helper.make_ack(msg)
-        yield self.backend.add_event(ack)
-        old_stored_event = yield self.backend.get_raw_event(ack["event_id"])
-        self.assertEqual(old_stored_event.event, ack)
-
-        ack["helper_metadata"]["fruit"] = {"type": "pomaceous"}
-        yield self.backend.add_event(ack)
-        new_stored_event = yield self.backend.get_raw_event(ack["event_id"])
-        self.assertEqual(new_stored_event.event, ack)
-        self.assertNotEqual(new_stored_event.event, old_stored_event.event)
 
     @inlineCallbacks
     def test_get_event(self):
