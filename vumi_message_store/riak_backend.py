@@ -225,14 +225,21 @@ class MessageStoreRiakBackend(object):
         """
         List inbound message keys with timestamps for the given batch.
         """
+        if start is not None:
+            start = to_reverse_timestamp(start)
+        if end is not None:
+            end = to_reverse_timestamp(end)
         if max_results is None:
             max_results = self.DEFAULT_MAX_RESULTS
-        start_value, end_value = self._start_end_values(batch_id, start, end)
+        # The index is an inverse timestamp so the start and end range values
+        # are swapped.
+        start, end = end, start
+        start_range, end_range = self._start_end_values(batch_id, start, end)
         results = yield self.inbound_messages.index_keys_page(
-            'batches_with_addresses', start_value, end_value,
+            'batches_with_addresses_reverse', start_range, end_range,
             return_terms=True, max_results=max_results)
         returnValue(IndexPageWrapper(
-            key_with_ts_only_formatter, self, batch_id, results))
+            key_with_rts_only_formatter, self, batch_id, results))
 
     @Manager.calls_manager
     def list_batch_outbound_keys_with_timestamps(self, batch_id, start=None,
@@ -240,51 +247,25 @@ class MessageStoreRiakBackend(object):
         """
         List outbound message keys with timestamps for the given batch.
         """
+        if start is not None:
+            start = to_reverse_timestamp(start)
+        if end is not None:
+            end = to_reverse_timestamp(end)
         if max_results is None:
             max_results = self.DEFAULT_MAX_RESULTS
-        start_value, end_value = self._start_end_values(batch_id, start, end)
+        # The index is an inverse timestamp so the start and end range values
+        # are swapped.
+        start, end = end, start
+        start_range, end_range = self._start_end_values(batch_id, start, end)
         results = yield self.outbound_messages.index_keys_page(
-            'batches_with_addresses', start_value, end_value,
+            'batches_with_addresses_reverse', start_range, end_range,
             return_terms=True, max_results=max_results)
         returnValue(IndexPageWrapper(
-            key_with_ts_only_formatter, self, batch_id, results))
+            key_with_rts_only_formatter, self, batch_id, results))
 
     @Manager.calls_manager
     def list_batch_inbound_keys_with_addresses(self, batch_id, start=None,
                                                end=None, max_results=None):
-        """
-        List inbound message keys with timestamps and addresses in ascending
-        timestamp order for the given batch.
-        """
-        if max_results is None:
-            max_results = self.DEFAULT_MAX_RESULTS
-        start_value, end_value = self._start_end_values(batch_id, start, end)
-        results = yield self.inbound_messages.index_keys_page(
-            'batches_with_addresses', start_value, end_value,
-            return_terms=True, max_results=max_results)
-        returnValue(IndexPageWrapper(
-            key_with_ts_and_value_formatter, self, batch_id, results))
-
-    @Manager.calls_manager
-    def list_batch_outbound_keys_with_addresses(self, batch_id, start=None,
-                                                end=None, max_results=None):
-        """
-        List outbound message keys with timestamps and addresses in ascending
-        timestamp order for the given batch.
-        """
-        if max_results is None:
-            max_results = self.DEFAULT_MAX_RESULTS
-        start_value, end_value = self._start_end_values(batch_id, start, end)
-        results = yield self.outbound_messages.index_keys_page(
-            'batches_with_addresses', start_value, end_value,
-            return_terms=True, max_results=max_results)
-        returnValue(IndexPageWrapper(
-            key_with_ts_and_value_formatter, self, batch_id, results))
-
-    @Manager.calls_manager
-    def list_batch_inbound_keys_with_addresses_reverse(self, batch_id,
-                                                       start=None, end=None,
-                                                       max_results=None):
         """
         List inbound message keys with timestamps and addresses in descending
         timestamp order for the given batch.
@@ -306,9 +287,8 @@ class MessageStoreRiakBackend(object):
             key_with_rts_and_value_formatter, self, batch_id, results))
 
     @Manager.calls_manager
-    def list_batch_outbound_keys_with_addresses_reverse(self, batch_id,
-                                                        start=None, end=None,
-                                                        max_results=None):
+    def list_batch_outbound_keys_with_addresses(self, batch_id, start=None,
+                                                end=None, max_results=None):
         """
         List outbound message keys with timestamps and addresses in descending
         timestamp order for the given batch.
@@ -420,6 +400,6 @@ def key_with_rts_and_value_formatter(batch_id, result):
     return (key, from_reverse_timestamp(reverse_ts), value)
 
 
-def key_with_ts_only_formatter(batch_id, result):
-    key, timestamp, value = key_with_ts_and_value_formatter(batch_id, result)
-    return (key, timestamp)
+def key_with_rts_only_formatter(batch_id, result):
+    key, reverse_ts, value = key_with_ts_and_value_formatter(batch_id, result)
+    return (key, from_reverse_timestamp(reverse_ts))
