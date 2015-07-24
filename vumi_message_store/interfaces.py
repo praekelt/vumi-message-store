@@ -142,12 +142,14 @@ class IOperationalMessageStore(Interface):
             If async, a Deferred is returned instead.
         """
 
-    def add_event(event):
+    def add_event(event, batch_ids=()):
         """
         Add an event to the message store.
 
         :param event:
             The TransportEvent to add.
+        :param batch_ids:
+            Sequence of batch identifiers to add the event to.
 
         :returns:
             ``None``.

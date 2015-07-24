@@ -115,20 +115,12 @@ class OperationalMessageStore(object):
         return self.riak_backend.get_outbound_message(msg_id)
 
     @Manager.calls_manager
-    def add_event(self, event):
+    def add_event(self, event, batch_ids=()):
         """
         Add an event to the message store.
-
-        NOTE: This loads the message for the event so we can find the relevant
-              batches.
         """
-        yield self.riak_backend.add_event(event)
-        outbound_message = yield self.riak_backend.get_raw_outbound_message(
-            event["user_message_id"])
-        if outbound_message is None:
-            # Should we emit a warning or something here?
-            return
-        for batch_id in outbound_message.batches.keys():
+        yield self.riak_backend.add_event(event, batch_ids=batch_ids)
+        for batch_id in batch_ids:
             yield self.batch_info_cache.add_event(batch_id, event)
 
     def get_event(self, event_id):

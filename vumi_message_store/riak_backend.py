@@ -146,7 +146,7 @@ class MessageStoreRiakBackend(object):
         returnValue(msg.msg if msg is not None else None)
 
     @Manager.calls_manager
-    def add_event(self, event):
+    def add_event(self, event, batch_ids=()):
         """
         Store an event in Riak.
         """
@@ -157,6 +157,10 @@ class MessageStoreRiakBackend(object):
             event_record = self.events(event_id, event=event, message=msg_id)
         else:
             event_record.event = event
+
+        for batch_id in batch_ids:
+            event_record.batches.add_key(batch_id)
+
         yield event_record.save()
 
     def get_raw_event(self, event_id):

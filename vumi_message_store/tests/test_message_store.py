@@ -498,43 +498,58 @@ class TestOperationalMessageStore(VumiTestCase):
         ]))
 
     @inlineCallbacks
-    def test_add_ack_event_with_outbound_in_batch(self):
+    def test_add_ack_event_with_batch_id(self):
         """
-        When an event related to an outbound message in a batch is added, it is
-        stored in Riak and is added to the info cache for that batch.
+        When an event is added with a batch identifier, that batch identifier
+        is stored with it and indexed. Additionally, it is added to the batch
+        info cache.
         """
         yield self.bi_cache.batch_start("mybatch")
         msg = self.msg_helper.make_outbound("apples")
-        yield self.backend.add_outbound_message(msg, batch_ids=["mybatch"])
         ack = self.msg_helper.make_ack(msg)
-        stored_event = yield self.backend.get_raw_event(ack["event_id"])
-        self.assertEqual(stored_event, None)
-
-        yield self.store.add_event(ack)
+        yield self.store.add_event(ack, batch_ids=["mybatch"])
         stored_event = yield self.backend.get_raw_event(ack["event_id"])
         self.assertEqual(stored_event.event, ack)
+        self.assertEqual(stored_event.batches.keys(), ["mybatch"])
         batch_keys = yield self.bi_cache.list_event_keys("mybatch")
         self.assertEqual(batch_keys, [ack["event_id"]])
 
     @inlineCallbacks
-    def test_add_ack_event_with_outbound_in_multiple_batches(self):
+    def test_add_ack_event_with_multiple_batch_ids(self):
         """
-        When an event related to an outbound message in multiple batches is
-        added, it is stored in Riak and is added to the info cache for each
-        batch.
+        When an event is added with multiple batch identifiers, it belongs to
+        all the specified batches and is added to all their info caches.
         """
         yield self.bi_cache.batch_start("mybatch")
         yield self.bi_cache.batch_start("yourbatch")
         msg = self.msg_helper.make_outbound("apples")
-        yield self.backend.add_outbound_message(
-            msg, batch_ids=["mybatch", "yourbatch"])
         ack = self.msg_helper.make_ack(msg)
-        stored_event = yield self.backend.get_raw_event(ack["event_id"])
-        self.assertEqual(stored_event, None)
-
-        yield self.store.add_event(ack)
+        yield self.store.add_event(ack, batch_ids=["mybatch", "yourbatch"])
         stored_event = yield self.backend.get_raw_event(ack["event_id"])
         self.assertEqual(stored_event.event, ack)
+        self.assertEqual(
+            sorted(stored_event.batches.keys()), ["mybatch", "yourbatch"])
+        mykeys = yield self.bi_cache.list_event_keys("mybatch")
+        self.assertEqual(mykeys, [ack["event_id"]])
+        yourkeys = yield self.bi_cache.list_event_keys("yourbatch")
+        self.assertEqual(yourkeys, [ack["event_id"]])
+
+    @inlineCallbacks
+    def test_add_event_to_new_batch(self):
+        """
+        When an existing event is added with a new batch identifier, it belongs
+        to the new batch as well as batches it already belonged to.
+        """
+        yield self.bi_cache.batch_start("mybatch")
+        yield self.bi_cache.batch_start("yourbatch")
+        msg = self.msg_helper.make_outbound("apples")
+        ack = self.msg_helper.make_ack(msg)
+        yield self.store.add_event(ack, batch_ids=["mybatch"])
+        yield self.store.add_event(ack, batch_ids=["yourbatch"])
+        stored_event = yield self.backend.get_raw_event(ack["event_id"])
+        self.assertEqual(stored_event.event, ack)
+        self.assertEqual(
+            sorted(stored_event.batches.keys()), ["mybatch", "yourbatch"])
         mykeys = yield self.bi_cache.list_event_keys("mybatch")
         self.assertEqual(mykeys, [ack["event_id"]])
         yourkeys = yield self.bi_cache.list_event_keys("yourbatch")

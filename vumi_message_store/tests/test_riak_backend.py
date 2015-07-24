@@ -512,6 +512,93 @@ class RiakBackendTestMixin(object):
         ]))
 
     @inlineCallbacks
+    def test_add_ack_event_with_batch_id(self):
+        """
+        When an event is added with a batch identifier, that batch identifier
+        is stored with it and indexed.
+        """
+        events = self.manager.proxy(Event)
+        msg = self.msg_helper.make_outbound("apples")
+        ack = self.msg_helper.make_ack(msg)
+        yield self.backend.add_event(ack, batch_ids=["mybatch"])
+        stored_event = yield events.load(ack["event_id"])
+        self.assertEqual(stored_event.event, ack)
+        self.assertEqual(stored_event.batches.keys(), ["mybatch"])
+
+        # Make sure we're writing the right indexes.
+        timestamp = format_vumi_date(msg['timestamp'])
+        reverse_ts = to_reverse_timestamp(timestamp)
+        self.assertEqual(stored_event._riak_object.get_indexes(), set([
+            ("message_bin", ack["user_message_id"]),
+            ("batches_bin", "mybatch"),
+            ("message_with_status_bin",
+             "%s$%s$%s" % (ack["user_message_id"], ack["timestamp"], "ack")),
+            ("batches_with_statuses_reverse_bin",
+             "%s$%s$%s" % ("mybatch", reverse_ts, "ack")),
+        ]))
+
+    @inlineCallbacks
+    def test_add_ack_event_with_multiple_batch_ids(self):
+        """
+        When an event is added with multiple batch identifiers, it belongs to
+        all the specified batches.
+        """
+        events = self.manager.proxy(Event)
+        msg = self.msg_helper.make_outbound("apples")
+        ack = self.msg_helper.make_ack(msg)
+        yield self.backend.add_event(ack, batch_ids=["mybatch", "yourbatch"])
+        stored_event = yield events.load(ack["event_id"])
+        self.assertEqual(stored_event.event, ack)
+        self.assertEqual(
+            sorted(stored_event.batches.keys()), ["mybatch", "yourbatch"])
+
+        # Make sure we're writing the right indexes.
+        timestamp = format_vumi_date(msg['timestamp'])
+        reverse_ts = to_reverse_timestamp(timestamp)
+        self.assertEqual(stored_event._riak_object.get_indexes(), set([
+            ("message_bin", ack["user_message_id"]),
+            ("batches_bin", "mybatch"),
+            ('batches_bin', "yourbatch"),
+            ("message_with_status_bin",
+             "%s$%s$%s" % (ack["user_message_id"], ack["timestamp"], "ack")),
+            ("batches_with_statuses_reverse_bin",
+             "%s$%s$%s" % ("mybatch", reverse_ts, "ack")),
+            ("batches_with_statuses_reverse_bin",
+             "%s$%s$%s" % ("yourbatch", reverse_ts, "ack")),
+        ]))
+
+    @inlineCallbacks
+    def test_add_ack_event_to_new_batch(self):
+        """
+        When an existing event is added with a new batch identifier, it belongs
+        to the new batch as well as batches it already belonged to.
+        """
+        events = self.manager.proxy(Event)
+        msg = self.msg_helper.make_outbound("apples")
+        ack = self.msg_helper.make_ack(msg)
+        yield self.backend.add_event(ack, batch_ids=["mybatch"])
+        yield self.backend.add_event(ack, batch_ids=["yourbatch"])
+        stored_event = yield events.load(ack["event_id"])
+        self.assertEqual(stored_event.event, ack)
+        self.assertEqual(
+            sorted(stored_event.batches.keys()), ["mybatch", "yourbatch"])
+
+        # Make sure we're writing the right indexes.
+        timestamp = format_vumi_date(msg['timestamp'])
+        reverse_ts = to_reverse_timestamp(timestamp)
+        self.assertEqual(stored_event._riak_object.get_indexes(), set([
+            ("message_bin", ack["user_message_id"]),
+            ("batches_bin", "mybatch"),
+            ('batches_bin', "yourbatch"),
+            ("message_with_status_bin",
+             "%s$%s$%s" % (ack["user_message_id"], ack["timestamp"], "ack")),
+            ("batches_with_statuses_reverse_bin",
+             "%s$%s$%s" % ("mybatch", reverse_ts, "ack")),
+            ("batches_with_statuses_reverse_bin",
+             "%s$%s$%s" % ("yourbatch", reverse_ts, "ack")),
+        ]))
+
+    @inlineCallbacks
     def test_add_delivery_report_event(self):
         """
         When a delivery report event is added, delivery status is included in
