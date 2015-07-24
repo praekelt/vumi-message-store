@@ -357,6 +357,25 @@ class IQueryMessageStore(Interface):
             If async, a Deferred is returned instead.
         """
 
+    def list_batch_events(batch_id, start=None, end=None):
+        """
+        List event keys with timestamps and statuses for the given batch.
+
+        :param batch_id:
+            The batch identifier for the batch to operate on.
+
+        :param start:
+            Timestamp denoting the start of a range query.
+
+        :param end:
+            Timestamp denoting the end of a range query.
+
+        :returns:
+            An IndexPage object containing a list of tuples of event key,
+            timestamp, and statuses.
+            If async, a Deferred is returned instead.
+        """
+
     def get_batch_info_status(batch_id):
         """
         Return a dictionary containing the latest event stats for the given

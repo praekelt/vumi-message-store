@@ -1325,3 +1325,79 @@ class TestQueryMessageStore(VumiTestCase):
         """
         count = yield self.store.get_batch_to_addr_count("batch")
         self.assertEqual(count, 0)
+
+    @inlineCallbacks
+    def test_list_batch_events(self):
+        """
+        When we ask for a list of event keys for a batch, we get an
+        IndexPageWrapper containing the first page of results and can ask for
+        following pages until all results are delivered.
+        """
+        batch_id, msg_id, all_keys = (
+            yield self.msg_seq_helper.create_ack_event_sequence())
+        keys_p1 = yield self.store.list_batch_events(
+            batch_id, max_results=3)
+        # Paginated results are sorted by descending timestamp.
+        self.assertEqual(list(keys_p1), all_keys[:3])
+
+        keys_p2 = yield keys_p1.next_page()
+        self.assertEqual(list(keys_p2), all_keys[3:])
+
+    @inlineCallbacks
+    def test_list_batch_events_range_start(self):
+        """
+        When we ask for a list of event keys for a batch, we can specify a
+        start timestamp.
+        """
+        batch_id, msg_id, all_keys = (
+            yield self.msg_seq_helper.create_ack_event_sequence())
+        keys_p1 = yield self.store.list_batch_events(
+            batch_id, start=all_keys[-2][1], max_results=3)
+        # Paginated results are sorted by descending timestamp.
+        self.assertEqual(list(keys_p1), all_keys[0:3])
+
+        keys_p2 = yield keys_p1.next_page()
+        self.assertEqual(list(keys_p2), all_keys[3:-1])
+
+    @inlineCallbacks
+    def test_list_batch_events_range_end(self):
+        """
+        When we ask for a list of event keys for a batch, we can specify an end
+        timestamp.
+        """
+        batch_id, msg_id, all_keys = (
+            yield self.msg_seq_helper.create_ack_event_sequence())
+        keys_p1 = yield self.store.list_batch_events(
+            batch_id, end=all_keys[1][1], max_results=3)
+        # Paginated results are sorted by descending timestamp.
+        self.assertEqual(list(keys_p1), all_keys[1:4])
+
+        keys_p2 = yield keys_p1.next_page()
+        self.assertEqual(list(keys_p2), all_keys[4:])
+
+    @inlineCallbacks
+    def test_list_batch_events_range(self):
+        """
+        When we ask for a list of event keys for a batch, we can specify both
+        ends of the range.
+        """
+        batch_id, msg_id, all_keys = (
+            yield self.msg_seq_helper.create_ack_event_sequence())
+        keys_p1 = yield self.store.list_batch_events(
+            batch_id, start=all_keys[-2][1], end=all_keys[1][1], max_results=2)
+        # Paginated results are sorted by descending timestamp.
+        self.assertEqual(list(keys_p1), all_keys[1:3])
+
+        keys_p2 = yield keys_p1.next_page()
+        self.assertEqual(list(keys_p2), all_keys[3:-1])
+
+    @inlineCallbacks
+    def test_list_batch_events_empty(self):
+        """
+        When we ask for a list of event keys for a batch for an empty batch, we
+        get an empty IndexPageWrapper.
+        """
+        batch_id = yield self.backend.batch_start()
+        keys_page = yield self.store.list_batch_events(
+            batch_id)
+        self.assertEqual(list(keys_page), [])

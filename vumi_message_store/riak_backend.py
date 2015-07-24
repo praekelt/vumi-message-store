@@ -329,6 +329,29 @@ class MessageStoreRiakBackend(object):
         returnValue(IndexPageWrapper(
             key_with_ts_and_value_formatter, self, message_id, results))
 
+    @Manager.calls_manager
+    def list_batch_events(self, batch_id, start=None, end=None,
+                          max_results=None):
+        """
+        List event keys with timestamps and statuses for the given outbound
+        message.
+        """
+        if start is not None:
+            start = to_reverse_timestamp(start)
+        if end is not None:
+            end = to_reverse_timestamp(end)
+        if max_results is None:
+            max_results = self.DEFAULT_MAX_RESULTS
+        # The index is an inverse timestamp so the start and end range values
+        # are swapped.
+        start, end = end, start
+        start_range, end_range = self._start_end_values(batch_id, start, end)
+        results = yield self.events.index_keys_page(
+            'batches_with_statuses_reverse', start_range, end_range,
+            return_terms=True, max_results=max_results)
+        returnValue(IndexPageWrapper(
+            key_with_rts_and_value_formatter, self, batch_id, results))
+
 
 class IndexPageWrapper(object):
     """
