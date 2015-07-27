@@ -372,6 +372,7 @@ class BatchInfoCache(object):
         from_addrs = set()
         while inbound_page is not None:
             for key, timestamp, from_addr in inbound_page:
+                count += 1
                 # Treat the most recent messages as though we were recording
                 # them in flight.
                 if not recents_added:
@@ -383,7 +384,6 @@ class BatchInfoCache(object):
                         count = 0
                 else:
                     from_addrs.add(from_addr)
-                count += 1
 
             # After storing the most recent messages, count the rest, updating
             # the count in Redis after processing each page.
@@ -409,6 +409,7 @@ class BatchInfoCache(object):
         to_addrs = set()
         while outbound_page is not None:
             for key, timestamp, to_addr in outbound_page:
+                count += 1
                 # Treat the most recent messages as though we were recording
                 # them in flight.
                 if not recents_added:
@@ -420,7 +421,6 @@ class BatchInfoCache(object):
                         count = 0
                 else:
                     to_addrs.add(to_addr)
-                count += 1
 
             # After storing the most recent messages, count the rest, updating
             # the count in Redis after processing each page.
@@ -446,6 +446,7 @@ class BatchInfoCache(object):
         statuses = {}
         while event_page is not None:
             for key, timestamp, status in event_page:
+                count += 1
                 # Treat the most recent events as though we were recording
                 # them in flight.
                 if not recents_added:
@@ -456,7 +457,6 @@ class BatchInfoCache(object):
                         count = 0
                 else:
                     statuses[status] = statuses.get(status, 0) + 1
-                count += 1
 
             # After storing the most recent events, count the rest, updating
             # the count in Redis after processing each page.
