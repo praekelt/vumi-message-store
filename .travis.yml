@@ -36,7 +36,7 @@ before_script:
   - $HOME/riak/bin/riak-admin member-status
 script:
   - if [ -z "$NO_COVERAGE" ]; then COVERAGE_CMD="coverage run --source=vumi_message_store"; else COVERAGE_CMD=""; fi
-  - VUMI_TEST_ASSERT_CLOSED=true $COVERAGE_CMD `which trial` vumi_message_store
+  - VUMI_TEST_ASSERT_CLOSED=true VUMI_TEST_TIMEOUT=10 $COVERAGE_CMD `which trial` vumi_message_store
 
 after_success:
   - if [ -z "$NO_COVERAGE" ]; then coveralls; fi
