@@ -179,12 +179,13 @@ class BatchInfoCache(object):
             yield self.redis.incr(self.inbound_count_key(batch_id))
             yield self.truncate_inbound_message_keys(batch_id)
 
-    def add_from_addr(self, batch_id, from_addr):
+    def add_from_addr(self, batch_id, *from_addrs):
         """
         Add a from address to the HyperLogLog counter for the batch.
         """
         return self.redis.pfadd(
-            self.from_addr_key(batch_id), from_addr.encode('utf-8'))
+            self.from_addr_key(batch_id),
+            *[from_addr.encode('utf-8') for from_addr in from_addrs])
 
     @Manager.calls_manager
     def add_outbound_message(self, batch_id, msg):
@@ -209,12 +210,13 @@ class BatchInfoCache(object):
             yield self.redis.incr(self.outbound_count_key(batch_id))
             yield self.truncate_outbound_message_keys(batch_id)
 
-    def add_to_addr(self, batch_id, to_addr):
+    def add_to_addr(self, batch_id, *to_addrs):
         """
         Add a from address to the HyperLogLog counter for the batch.
         """
         return self.redis.pfadd(
-            self.to_addr_key(batch_id), to_addr.encode('utf-8'))
+            self.to_addr_key(batch_id),
+            *[to_addr.encode('utf-8') for to_addr in to_addrs])
 
     @Manager.calls_manager
     def add_event(self, batch_id, event):
@@ -367,26 +369,32 @@ class BatchInfoCache(object):
         """
         inbound_page = yield qms.list_batch_inbound_keys_with_addresses(
             batch_id, max_results=page_size)
-        keys_added = 0
-        keys_count = 0
+        count = 0
+        recents_added = False
+        from_addrs = set()
         while inbound_page is not None:
             for key, timestamp, from_addr in inbound_page:
                 # Treat the most recent messages as though we were recording
                 # them in flight.
-                if keys_added < self.TRUNCATE_MESSAGE_KEY_ZSET_AT:
+                if not recents_added:
                     yield self.add_inbound_message_key(
                         batch_id, key, to_timestamp(timestamp))
-                    keys_added += 1
+                    yield self.add_from_addr(batch_id, from_addr)
+                    if count == self.TRUNCATE_MESSAGE_KEY_ZSET_AT:
+                        recents_added = True
+                        count = 0
                 else:
-                    keys_count += 1
-
-                yield self.add_from_addr(batch_id, from_addr)
+                    from_addrs.add(from_addr)
+                count += 1
 
             # After storing the most recent messages, count the rest, updating
             # the count in Redis after processing each page.
-            if keys_added == self.TRUNCATE_MESSAGE_KEY_ZSET_AT:
-                yield self.add_inbound_message_count(batch_id, keys_count)
-                keys_count = 0
+            if recents_added:
+                yield self.add_inbound_message_count(batch_id, count)
+                count = 0
+
+                yield self.add_from_addr(batch_id, *from_addrs)
+                from_addrs.clear()
 
             inbound_page = yield inbound_page.next_page()
 
@@ -398,26 +406,32 @@ class BatchInfoCache(object):
         """
         outbound_page = yield qms.list_batch_outbound_keys_with_addresses(
             batch_id, max_results=page_size)
-        keys_added = 0
-        keys_count = 0
+        count = 0
+        recents_added = False
+        to_addrs = set()
         while outbound_page is not None:
             for key, timestamp, to_addr in outbound_page:
                 # Treat the most recent messages as though we were recording
                 # them in flight.
-                if keys_added < self.TRUNCATE_MESSAGE_KEY_ZSET_AT:
+                if not recents_added:
                     yield self.add_outbound_message_key(
                         batch_id, key, to_timestamp(timestamp))
-                    keys_added += 1
+                    yield self.add_to_addr(batch_id, to_addr)
+                    if count == self.TRUNCATE_MESSAGE_KEY_ZSET_AT:
+                        recents_added = True
+                        count = 0
                 else:
-                    keys_count += 1
-
-                yield self.add_to_addr(batch_id, to_addr)
+                    to_addrs.add(to_addr)
+                count += 1
 
             # After storing the most recent messages, count the rest, updating
             # the count in Redis after processing each page.
-            if keys_added == self.TRUNCATE_MESSAGE_KEY_ZSET_AT:
-                yield self.add_outbound_message_count(batch_id, keys_count)
-                keys_count = 0
+            if recents_added:
+                yield self.add_outbound_message_count(batch_id, count)
+                count = 0
+
+                yield self.add_to_addr(batch_id, *to_addrs)
+                to_addrs.clear()
 
             outbound_page = yield outbound_page.next_page()
 
@@ -429,22 +443,26 @@ class BatchInfoCache(object):
         """
         event_page = yield qms.list_batch_events(
             batch_id, max_results=page_size)
-        keys_added = 0
+        count = 0
+        recents_added = False
         statuses = {}
         while event_page is not None:
             for key, timestamp, status in event_page:
                 # Treat the most recent events as though we were recording
                 # them in flight.
-                if keys_added < self.TRUNCATE_MESSAGE_KEY_ZSET_AT:
+                if not recents_added:
                     yield self.add_event_key(
                         batch_id, key, status, to_timestamp(timestamp))
-                    keys_added += 1
+                    if count == self.TRUNCATE_MESSAGE_KEY_ZSET_AT:
+                        recents_added = True
+                        count = 0
                 else:
                     statuses[status] = statuses.get(status, 0) + 1
+                count += 1
 
             # After storing the most recent events, count the rest, updating
             # the count in Redis after processing each page.
-            if keys_added == self.TRUNCATE_MESSAGE_KEY_ZSET_AT:
+            if recents_added:
                 for status, count in statuses.iteritems():
                     yield self.add_event_count(batch_id, status, count)
                 statuses.clear()
