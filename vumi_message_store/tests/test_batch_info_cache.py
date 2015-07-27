@@ -1075,7 +1075,7 @@ class TestBatchInfoCache(VumiTestCase):
         for event in events:
             event_keys.append(
                 (event["event_id"], to_timestamp(event["timestamp"])))
-            yield backend.add_event(event)
+            yield backend.add_event(event, batch_ids=["mybatch"])
 
         # Fill the cache with some nonsense that we want to throw out when
         # rebuilding.
@@ -1166,7 +1166,7 @@ class TestBatchInfoCache(VumiTestCase):
         for event in events:
             event_keys.append(
                 (event["event_id"], to_timestamp(event["timestamp"])))
-            yield backend.add_event(event)
+            yield backend.add_event(event, batch_ids=["mybatch"])
 
         yield self.assert_redis_keys([])
         yield self.batch_info_cache.rebuild_cache("mybatch", qms)
