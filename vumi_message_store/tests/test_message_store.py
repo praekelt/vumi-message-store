@@ -1,10 +1,9 @@
 """
 Tests for vumi_message_store.message_store.
 """
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from twisted.internet.defer import inlineCallbacks
-from vumi.message import format_vumi_date
 from vumi.tests.helpers import VumiTestCase, MessageHelper, PersistenceHelper
 from zope.interface.verify import verifyObject
 
@@ -14,10 +13,6 @@ from vumi_message_store.interfaces import (
 from vumi_message_store.message_store import (
     MessageStoreBatchManager, OperationalMessageStore, QueryMessageStore)
 from vumi_message_store.tests.helpers import MessageSequenceHelper
-
-
-# TODO: Better way to test indexes. Currently indexes are retrieved
-#       using ._riak_object.get_indexes().
 
 
 class TestMessageStoreBatchManager(VumiTestCase):
@@ -263,8 +258,8 @@ class TestOperationalMessageStore(VumiTestCase):
     def test_add_inbound_message_with_batch_id(self):
         """
         When an inbound message is added with a batch identifier, that batch
-        identifier is stored with it and indexed. Additionally, it is added to
-        the batch info cache.
+        identifier is stored with it. Additionally, it is added to the batch
+        info cache.
         """
         yield self.bi_cache.batch_start("mybatch")
         msg = self.msg_helper.make_inbound("apples")
@@ -377,8 +372,8 @@ class TestOperationalMessageStore(VumiTestCase):
     def test_add_outbound_message_with_batch_id(self):
         """
         When an outbound message is added with a batch identifier, that batch
-        identifier is stored with it and indexed. Additionally, it is added to
-        the batch info cache.
+        identifier is stored with it. Additionally, it is added to the batch
+        info cache.
         """
         yield self.bi_cache.batch_start("mybatch")
         msg = self.msg_helper.make_outbound("apples")
@@ -459,7 +454,6 @@ class TestOperationalMessageStore(VumiTestCase):
         When an event is added, it is stored in Riak.
         """
         msg = self.msg_helper.make_outbound("apples")
-        yield self.backend.add_outbound_message(msg)
         ack = self.msg_helper.make_ack(msg)
         stored_event = yield self.backend.get_raw_event(ack["event_id"])
         self.assertEqual(stored_event, None)
@@ -467,84 +461,11 @@ class TestOperationalMessageStore(VumiTestCase):
         yield self.store.add_event(ack)
         stored_event = yield self.backend.get_raw_event(ack["event_id"])
         self.assertEqual(stored_event.event, ack)
-
-        # Make sure we're writing the right indexes.
-        self.assertEqual(stored_event._riak_object.get_indexes(), set([
-            ("message_bin", ack["user_message_id"]),
-            ("message_with_status_bin",
-             "%s$%s$%s" % (ack["user_message_id"], ack["timestamp"], "ack")),
-        ]))
-
-    @inlineCallbacks
-    def test_add_ack_event_no_stored_outbound(self):
-        """
-        When an event is added, it is stored in Riak even if there is no
-        outbound message to link it to.
-        """
-        msg = self.msg_helper.make_outbound("apples")
-        ack = self.msg_helper.make_ack(msg)
-        stored_event = yield self.backend.get_raw_event(ack["event_id"])
-        self.assertEqual(stored_event, None)
-
-        yield self.store.add_event(ack)
-        stored_event = yield self.backend.get_raw_event(ack["event_id"])
-        self.assertEqual(stored_event.event, ack)
-
-        # Make sure we're writing the right indexes.
-        self.assertEqual(stored_event._riak_object.get_indexes(), set([
-            ("message_bin", ack["user_message_id"]),
-            ("message_with_status_bin",
-             "%s$%s$%s" % (ack["user_message_id"], ack["timestamp"], "ack")),
-        ]))
-
-    @inlineCallbacks
-    def test_add_ack_event_with_outbound_in_batch(self):
-        """
-        When an event related to an outbound message in a batch is added, it is
-        stored in Riak and is added to the info cache for that batch.
-        """
-        yield self.bi_cache.batch_start("mybatch")
-        msg = self.msg_helper.make_outbound("apples")
-        yield self.backend.add_outbound_message(msg, batch_ids=["mybatch"])
-        ack = self.msg_helper.make_ack(msg)
-        stored_event = yield self.backend.get_raw_event(ack["event_id"])
-        self.assertEqual(stored_event, None)
-
-        yield self.store.add_event(ack)
-        stored_event = yield self.backend.get_raw_event(ack["event_id"])
-        self.assertEqual(stored_event.event, ack)
-        batch_keys = yield self.bi_cache.list_event_keys("mybatch")
-        self.assertEqual(batch_keys, [ack["event_id"]])
-
-    @inlineCallbacks
-    def test_add_ack_event_with_outbound_in_multiple_batches(self):
-        """
-        When an event related to an outbound message in multiple batches is
-        added, it is stored in Riak and is added to the info cache for each
-        batch.
-        """
-        yield self.bi_cache.batch_start("mybatch")
-        yield self.bi_cache.batch_start("yourbatch")
-        msg = self.msg_helper.make_outbound("apples")
-        yield self.backend.add_outbound_message(
-            msg, batch_ids=["mybatch", "yourbatch"])
-        ack = self.msg_helper.make_ack(msg)
-        stored_event = yield self.backend.get_raw_event(ack["event_id"])
-        self.assertEqual(stored_event, None)
-
-        yield self.store.add_event(ack)
-        stored_event = yield self.backend.get_raw_event(ack["event_id"])
-        self.assertEqual(stored_event.event, ack)
-        mykeys = yield self.bi_cache.list_event_keys("mybatch")
-        self.assertEqual(mykeys, [ack["event_id"]])
-        yourkeys = yield self.bi_cache.list_event_keys("yourbatch")
-        self.assertEqual(yourkeys, [ack["event_id"]])
 
     @inlineCallbacks
     def test_add_delivery_report_event(self):
         """
-        When a delivery report event is added, delivery status is included in
-        the indexed status.
+        When a delivery report event is added it is stored in Riak.
         """
         msg = self.msg_helper.make_outbound("apples")
         dr = self.msg_helper.make_delivery_report(msg)
@@ -554,14 +475,6 @@ class TestOperationalMessageStore(VumiTestCase):
         yield self.backend.add_event(dr)
         stored_event = yield self.backend.get_raw_event(dr["event_id"])
         self.assertEqual(stored_event.event, dr)
-
-        # Make sure we're writing the right indexes.
-        self.assertEqual(stored_event._riak_object.get_indexes(), set([
-            ("message_bin", dr["user_message_id"]),
-            ("message_with_status_bin",
-             "%s$%s$%s" % (dr["user_message_id"], dr["timestamp"],
-                           "delivery_report.delivered")),
-        ]))
 
     @inlineCallbacks
     def test_add_ack_event_again(self):
@@ -579,6 +492,63 @@ class TestOperationalMessageStore(VumiTestCase):
         new_stored_event = yield self.backend.get_raw_event(ack["event_id"])
         self.assertEqual(new_stored_event.event, ack)
         self.assertNotEqual(new_stored_event.event, old_stored_event.event)
+
+    @inlineCallbacks
+    def test_add_ack_event_with_batch_id(self):
+        """
+        When an event is added with a batch identifier, that batch identifier
+        is stored with it. Additionally, it is added to the batch info cache.
+        """
+        yield self.bi_cache.batch_start("mybatch")
+        msg = self.msg_helper.make_outbound("apples")
+        ack = self.msg_helper.make_ack(msg)
+        yield self.store.add_event(ack, batch_ids=["mybatch"])
+        stored_event = yield self.backend.get_raw_event(ack["event_id"])
+        self.assertEqual(stored_event.event, ack)
+        self.assertEqual(stored_event.batches.keys(), ["mybatch"])
+        batch_keys = yield self.bi_cache.list_event_keys("mybatch")
+        self.assertEqual(batch_keys, [ack["event_id"]])
+
+    @inlineCallbacks
+    def test_add_ack_event_with_multiple_batch_ids(self):
+        """
+        When an event is added with multiple batch identifiers, it belongs to
+        all the specified batches and is added to all their info caches.
+        """
+        yield self.bi_cache.batch_start("mybatch")
+        yield self.bi_cache.batch_start("yourbatch")
+        msg = self.msg_helper.make_outbound("apples")
+        ack = self.msg_helper.make_ack(msg)
+        yield self.store.add_event(ack, batch_ids=["mybatch", "yourbatch"])
+        stored_event = yield self.backend.get_raw_event(ack["event_id"])
+        self.assertEqual(stored_event.event, ack)
+        self.assertEqual(
+            sorted(stored_event.batches.keys()), ["mybatch", "yourbatch"])
+        mykeys = yield self.bi_cache.list_event_keys("mybatch")
+        self.assertEqual(mykeys, [ack["event_id"]])
+        yourkeys = yield self.bi_cache.list_event_keys("yourbatch")
+        self.assertEqual(yourkeys, [ack["event_id"]])
+
+    @inlineCallbacks
+    def test_add_ack_event_to_new_batch(self):
+        """
+        When an existing event is added with a new batch identifier, it belongs
+        to the new batch as well as batches it already belonged to.
+        """
+        yield self.bi_cache.batch_start("mybatch")
+        yield self.bi_cache.batch_start("yourbatch")
+        msg = self.msg_helper.make_outbound("apples")
+        ack = self.msg_helper.make_ack(msg)
+        yield self.store.add_event(ack, batch_ids=["mybatch"])
+        yield self.store.add_event(ack, batch_ids=["yourbatch"])
+        stored_event = yield self.backend.get_raw_event(ack["event_id"])
+        self.assertEqual(stored_event.event, ack)
+        self.assertEqual(
+            sorted(stored_event.batches.keys()), ["mybatch", "yourbatch"])
+        mykeys = yield self.bi_cache.list_event_keys("mybatch")
+        self.assertEqual(mykeys, [ack["event_id"]])
+        yourkeys = yield self.bi_cache.list_event_keys("yourbatch")
+        self.assertEqual(yourkeys, [ack["event_id"]])
 
     @inlineCallbacks
     def test_get_event(self):
@@ -760,22 +730,11 @@ class TestQueryMessageStore(VumiTestCase):
         containing the first page of results and can ask for following pages
         until all results are delivered.
         """
-        batch_id = yield self.backend.batch_start()
-        msg = self.msg_helper.make_outbound("pears")
-        yield self.backend.add_outbound_message(msg, batch_ids=[batch_id])
-        events = [
-            self.msg_helper.make_ack(msg),
-            self.msg_helper.make_delivery_report(msg),
-            self.msg_helper.make_delivery_report(msg),
-            self.msg_helper.make_delivery_report(msg),
-            self.msg_helper.make_delivery_report(msg),
-        ]
-        for event in events:
-            yield self.backend.add_event(event)
-        all_keys = sorted(event["event_id"] for event in events)
+        batch_id, msg_id, all_keys = (
+            yield self.msg_seq_helper.create_ack_event_sequence())
+        all_keys = sorted(key for key, _, _ in all_keys)
 
-        keys_p1 = yield self.store.list_message_event_keys(
-            msg["message_id"], 3)
+        keys_p1 = yield self.store.list_message_event_keys(msg_id, 3)
         # Paginated results are sorted by key.
         self.assertEqual(sorted(keys_p1), all_keys[:3])
 
@@ -1131,33 +1090,13 @@ class TestQueryMessageStore(VumiTestCase):
         IndexPageWrapper containing the first page of results and can ask for
         following pages until all results are delivered.
         """
-        batch_id = yield self.backend.batch_start()
-        start = datetime.utcnow() - timedelta(seconds=10)
-        msg = self.msg_helper.make_outbound("hello", timestamp=start)
-        yield self.backend.add_outbound_message(msg, batch_ids=[batch_id])
-        ack = self.msg_helper.make_ack(msg, timestamp=start)
-        yield self.backend.add_event(ack)
-        drs = [
-            self.msg_helper.make_delivery_report(
-                msg, timestamp=(start + timedelta(seconds=1))),
-            self.msg_helper.make_delivery_report(
-                msg, timestamp=(start + timedelta(seconds=2))),
-            self.msg_helper.make_delivery_report(
-                msg, timestamp=(start + timedelta(seconds=3))),
-            self.msg_helper.make_delivery_report(
-                msg, timestamp=(start + timedelta(seconds=4))),
-        ]
-        all_keys = [
-            (ack["event_id"], format_vumi_date(ack["timestamp"]), "ack")]
-        for dr in drs:
-            yield self.backend.add_event(dr)
-            all_keys.append(
-                (dr["event_id"], format_vumi_date(dr["timestamp"]),
-                 "delivery_report.delivered"))
+        batch_id, msg_id, all_keys = (
+            yield self.msg_seq_helper.create_ack_event_sequence())
 
         keys_p1 = yield self.store.list_message_event_keys_with_statuses(
-            msg["message_id"], max_results=3)
-        # Paginated results are sorted by timestamp.
+            msg_id, max_results=3)
+        # Paginated results are sorted by ascending timestamp.
+        all_keys.reverse()
         self.assertEqual(list(keys_p1), all_keys[:3])
 
         keys_p2 = yield keys_p1.next_page()
@@ -1386,3 +1325,79 @@ class TestQueryMessageStore(VumiTestCase):
         """
         count = yield self.store.get_batch_to_addr_count("batch")
         self.assertEqual(count, 0)
+
+    @inlineCallbacks
+    def test_list_batch_events(self):
+        """
+        When we ask for a list of event keys for a batch, we get an
+        IndexPageWrapper containing the first page of results and can ask for
+        following pages until all results are delivered.
+        """
+        batch_id, msg_id, all_keys = (
+            yield self.msg_seq_helper.create_ack_event_sequence())
+        keys_p1 = yield self.store.list_batch_events(
+            batch_id, max_results=3)
+        # Paginated results are sorted by descending timestamp.
+        self.assertEqual(list(keys_p1), all_keys[:3])
+
+        keys_p2 = yield keys_p1.next_page()
+        self.assertEqual(list(keys_p2), all_keys[3:])
+
+    @inlineCallbacks
+    def test_list_batch_events_range_start(self):
+        """
+        When we ask for a list of event keys for a batch, we can specify a
+        start timestamp.
+        """
+        batch_id, msg_id, all_keys = (
+            yield self.msg_seq_helper.create_ack_event_sequence())
+        keys_p1 = yield self.store.list_batch_events(
+            batch_id, start=all_keys[-2][1], max_results=3)
+        # Paginated results are sorted by descending timestamp.
+        self.assertEqual(list(keys_p1), all_keys[0:3])
+
+        keys_p2 = yield keys_p1.next_page()
+        self.assertEqual(list(keys_p2), all_keys[3:-1])
+
+    @inlineCallbacks
+    def test_list_batch_events_range_end(self):
+        """
+        When we ask for a list of event keys for a batch, we can specify an end
+        timestamp.
+        """
+        batch_id, msg_id, all_keys = (
+            yield self.msg_seq_helper.create_ack_event_sequence())
+        keys_p1 = yield self.store.list_batch_events(
+            batch_id, end=all_keys[1][1], max_results=3)
+        # Paginated results are sorted by descending timestamp.
+        self.assertEqual(list(keys_p1), all_keys[1:4])
+
+        keys_p2 = yield keys_p1.next_page()
+        self.assertEqual(list(keys_p2), all_keys[4:])
+
+    @inlineCallbacks
+    def test_list_batch_events_range(self):
+        """
+        When we ask for a list of event keys for a batch, we can specify both
+        ends of the range.
+        """
+        batch_id, msg_id, all_keys = (
+            yield self.msg_seq_helper.create_ack_event_sequence())
+        keys_p1 = yield self.store.list_batch_events(
+            batch_id, start=all_keys[-2][1], end=all_keys[1][1], max_results=2)
+        # Paginated results are sorted by descending timestamp.
+        self.assertEqual(list(keys_p1), all_keys[1:3])
+
+        keys_p2 = yield keys_p1.next_page()
+        self.assertEqual(list(keys_p2), all_keys[3:-1])
+
+    @inlineCallbacks
+    def test_list_batch_events_empty(self):
+        """
+        When we ask for a list of event keys for a batch for an empty batch, we
+        get an empty IndexPageWrapper.
+        """
+        batch_id = yield self.backend.batch_start()
+        keys_page = yield self.store.list_batch_events(
+            batch_id)
+        self.assertEqual(list(keys_page), [])

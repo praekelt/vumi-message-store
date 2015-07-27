@@ -142,12 +142,14 @@ class IOperationalMessageStore(Interface):
             If async, a Deferred is returned instead.
         """
 
-    def add_event(event):
+    def add_event(event, batch_ids=()):
         """
         Add an event to the message store.
 
         :param event:
             The TransportEvent to add.
+        :param batch_ids:
+            Sequence of batch identifiers to add the event to.
 
         :returns:
             ``None``.
@@ -352,6 +354,25 @@ class IQueryMessageStore(Interface):
         :returns:
             An IndexPage object containing a list tupled of event key,
             timestamp, and event status.
+            If async, a Deferred is returned instead.
+        """
+
+    def list_batch_events(batch_id, start=None, end=None):
+        """
+        List event keys with timestamps and statuses for the given batch.
+
+        :param batch_id:
+            The batch identifier for the batch to operate on.
+
+        :param start:
+            Timestamp denoting the start of a range query.
+
+        :param end:
+            Timestamp denoting the end of a range query.
+
+        :returns:
+            An IndexPage object containing a list of tuples of event key,
+            timestamp, and statuses.
             If async, a Deferred is returned instead.
         """
 

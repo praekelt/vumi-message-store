@@ -3,9 +3,6 @@
 """
 Tests for vumi_message_store.riak_backend.
 """
-
-from datetime import datetime, timedelta
-
 from twisted.internet.defer import inlineCallbacks
 from vumi.message import format_vumi_date
 from vumi.tests.helpers import MessageHelper, VumiTestCase, PersistenceHelper
@@ -554,6 +551,93 @@ class RiakBackendTestMixin(object):
         self.assertNotEqual(new_stored_event.event, old_stored_event.event)
 
     @inlineCallbacks
+    def test_add_ack_event_with_batch_id(self):
+        """
+        When an event is added with a batch identifier, that batch identifier
+        is stored with it and indexed.
+        """
+        events = self.manager.proxy(Event)
+        msg = self.msg_helper.make_outbound("apples")
+        ack = self.msg_helper.make_ack(msg)
+        yield self.backend.add_event(ack, batch_ids=["mybatch"])
+        stored_event = yield events.load(ack["event_id"])
+        self.assertEqual(stored_event.event, ack)
+        self.assertEqual(stored_event.batches.keys(), ["mybatch"])
+
+        # Make sure we're writing the right indexes.
+        timestamp = format_vumi_date(msg['timestamp'])
+        reverse_ts = to_reverse_timestamp(timestamp)
+        self.assertEqual(stored_event._riak_object.get_indexes(), set([
+            ("message_bin", ack["user_message_id"]),
+            ("batches_bin", "mybatch"),
+            ("message_with_status_bin",
+             "%s$%s$%s" % (ack["user_message_id"], ack["timestamp"], "ack")),
+            ("batches_with_statuses_reverse_bin",
+             "%s$%s$%s" % ("mybatch", reverse_ts, "ack")),
+        ]))
+
+    @inlineCallbacks
+    def test_add_ack_event_with_multiple_batch_ids(self):
+        """
+        When an event is added with multiple batch identifiers, it belongs to
+        all the specified batches.
+        """
+        events = self.manager.proxy(Event)
+        msg = self.msg_helper.make_outbound("apples")
+        ack = self.msg_helper.make_ack(msg)
+        yield self.backend.add_event(ack, batch_ids=["mybatch", "yourbatch"])
+        stored_event = yield events.load(ack["event_id"])
+        self.assertEqual(stored_event.event, ack)
+        self.assertEqual(
+            sorted(stored_event.batches.keys()), ["mybatch", "yourbatch"])
+
+        # Make sure we're writing the right indexes.
+        timestamp = format_vumi_date(msg['timestamp'])
+        reverse_ts = to_reverse_timestamp(timestamp)
+        self.assertEqual(stored_event._riak_object.get_indexes(), set([
+            ("message_bin", ack["user_message_id"]),
+            ("batches_bin", "mybatch"),
+            ('batches_bin', "yourbatch"),
+            ("message_with_status_bin",
+             "%s$%s$%s" % (ack["user_message_id"], ack["timestamp"], "ack")),
+            ("batches_with_statuses_reverse_bin",
+             "%s$%s$%s" % ("mybatch", reverse_ts, "ack")),
+            ("batches_with_statuses_reverse_bin",
+             "%s$%s$%s" % ("yourbatch", reverse_ts, "ack")),
+        ]))
+
+    @inlineCallbacks
+    def test_add_ack_event_to_new_batch(self):
+        """
+        When an existing event is added with a new batch identifier, it belongs
+        to the new batch as well as batches it already belonged to.
+        """
+        events = self.manager.proxy(Event)
+        msg = self.msg_helper.make_outbound("apples")
+        ack = self.msg_helper.make_ack(msg)
+        yield self.backend.add_event(ack, batch_ids=["mybatch"])
+        yield self.backend.add_event(ack, batch_ids=["yourbatch"])
+        stored_event = yield events.load(ack["event_id"])
+        self.assertEqual(stored_event.event, ack)
+        self.assertEqual(
+            sorted(stored_event.batches.keys()), ["mybatch", "yourbatch"])
+
+        # Make sure we're writing the right indexes.
+        timestamp = format_vumi_date(msg['timestamp'])
+        reverse_ts = to_reverse_timestamp(timestamp)
+        self.assertEqual(stored_event._riak_object.get_indexes(), set([
+            ("message_bin", ack["user_message_id"]),
+            ("batches_bin", "mybatch"),
+            ('batches_bin', "yourbatch"),
+            ("message_with_status_bin",
+             "%s$%s$%s" % (ack["user_message_id"], ack["timestamp"], "ack")),
+            ("batches_with_statuses_reverse_bin",
+             "%s$%s$%s" % ("mybatch", reverse_ts, "ack")),
+            ("batches_with_statuses_reverse_bin",
+             "%s$%s$%s" % ("yourbatch", reverse_ts, "ack")),
+        ]))
+
+    @inlineCallbacks
     def test_get_raw_event(self):
         """
         When we ask for a raw event, we get the Event model object.
@@ -1018,33 +1102,13 @@ class RiakBackendTestMixin(object):
         IndexPageWrapper containing the first page of results and can ask for
         following pages until all results are delivered.
         """
-        batch_id = yield self.backend.batch_start()
-        start = datetime.utcnow() - timedelta(seconds=10)
-        msg = self.msg_helper.make_outbound("hello", timestamp=start)
-        yield self.backend.add_outbound_message(msg, batch_ids=[batch_id])
-        ack = self.msg_helper.make_ack(msg, timestamp=start)
-        yield self.backend.add_event(ack)
-        drs = [
-            self.msg_helper.make_delivery_report(
-                msg, timestamp=(start + timedelta(seconds=1))),
-            self.msg_helper.make_delivery_report(
-                msg, timestamp=(start + timedelta(seconds=2))),
-            self.msg_helper.make_delivery_report(
-                msg, timestamp=(start + timedelta(seconds=3))),
-            self.msg_helper.make_delivery_report(
-                msg, timestamp=(start + timedelta(seconds=4))),
-        ]
-        all_keys = [(ack["event_id"],
-                    format_vumi_date(ack["timestamp"]), "ack")]
-        for dr in drs:
-            yield self.backend.add_event(dr)
-            all_keys.append(
-                (dr["event_id"], format_vumi_date(dr["timestamp"]),
-                 "delivery_report.delivered"))
+        batch_id, msg_id, all_keys = (
+            yield self.msg_seq_helper.create_ack_event_sequence())
 
         keys_p1 = yield self.backend.list_message_event_keys_with_statuses(
-            msg["message_id"], max_results=3)
-        # Paginated results are sorted by timestamp.
+            msg_id, max_results=3)
+        # Paginated results are sorted by ascending timestamp.
+        all_keys.reverse()
         self.assertEqual(list(keys_p1), all_keys[:3])
 
         keys_p2 = yield keys_p1.next_page()
@@ -1071,6 +1135,81 @@ class RiakBackendTestMixin(object):
         """
         keys_page = yield self.backend.list_message_event_keys_with_statuses(
             "badmsg")
+        self.assertEqual(list(keys_page), [])
+
+    @inlineCallbacks
+    def test_list_batch_events(self):
+        """
+        When we ask for a list of event keys by for a batch, we get an
+        IndexPageWrapper containing the first page of results and can ask for
+        following pages until all results are delivered.
+        """
+        batch_id, msg_id, all_keys = (
+            yield self.msg_seq_helper.create_ack_event_sequence())
+
+        keys_p1 = yield self.backend.list_batch_events(batch_id, max_results=3)
+        self.assertEqual(list(keys_p1), all_keys[:3])
+
+        keys_p2 = yield keys_p1.next_page()
+        self.assertEqual(list(keys_p2), all_keys[3:])
+
+    @inlineCallbacks
+    def test_list_batch_events_range_start(self):
+        """
+        When we ask for a list of event keys for a batch, we can specify a
+        start timestamp.
+        """
+        batch_id, msg_id, all_keys = (
+            yield self.msg_seq_helper.create_ack_event_sequence())
+        keys_p1 = yield self.backend.list_batch_events(
+            batch_id, start=all_keys[-2][1], max_results=3)
+        # Paginated results are sorted by descending timestamp.
+        self.assertEqual(list(keys_p1), all_keys[0:3])
+
+        keys_p2 = yield keys_p1.next_page()
+        self.assertEqual(list(keys_p2), all_keys[3:-1])
+
+    @inlineCallbacks
+    def test_list_batch_events_range_end(self):
+        """
+        When we ask for a list of event keys for a batch, we can specify an end
+        timestamp.
+        """
+        batch_id, msg_id, all_keys = (
+            yield self.msg_seq_helper.create_ack_event_sequence())
+        keys_p1 = yield self.backend.list_batch_events(
+            batch_id, end=all_keys[1][1], max_results=3)
+        # Paginated results are sorted by descending timestamp.
+        self.assertEqual(list(keys_p1), all_keys[1:4])
+
+        keys_p2 = yield keys_p1.next_page()
+        self.assertEqual(list(keys_p2), all_keys[4:])
+
+    @inlineCallbacks
+    def test_list_batch_events_range(self):
+        """
+        When we ask for a list of event keys for a batch, we can specify both
+        ends of the range.
+        """
+        batch_id, msg_id, all_keys = (
+            yield self.msg_seq_helper.create_ack_event_sequence())
+        keys_p1 = yield self.backend.list_batch_events(
+            batch_id, start=all_keys[-2][1], end=all_keys[1][1], max_results=2)
+        # Paginated results are sorted by descending timestamp.
+        self.assertEqual(list(keys_p1), all_keys[1:3])
+
+        keys_p2 = yield keys_p1.next_page()
+        self.assertEqual(list(keys_p2), all_keys[3:-1])
+
+    @inlineCallbacks
+    def test_list_batch_events_empty(self):
+        """
+        When we ask for a list of event keys for an empty batch, we get an
+        empty IndexPageWrapper.
+        """
+        batch_id = yield self.backend.batch_start()
+        keys_page = yield self.backend.list_batch_events(
+            batch_id)
         self.assertEqual(list(keys_page), [])
 
 
