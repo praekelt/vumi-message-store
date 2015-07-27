@@ -183,9 +183,8 @@ class BatchInfoCache(object):
         """
         Add a from address to the HyperLogLog counter for the batch.
         """
-        return self.redis.pfadd(
-            self.from_addr_key(batch_id),
-            *[from_addr.encode('utf-8') for from_addr in from_addrs])
+        from_addrs = [from_addr.encode('utf-8') for from_addr in from_addrs]
+        return self.redis.pfadd(self.from_addr_key(batch_id), *from_addrs)
 
     @Manager.calls_manager
     def add_outbound_message(self, batch_id, msg):
@@ -214,9 +213,8 @@ class BatchInfoCache(object):
         """
         Add a from address to the HyperLogLog counter for the batch.
         """
-        return self.redis.pfadd(
-            self.to_addr_key(batch_id),
-            *[to_addr.encode('utf-8') for to_addr in to_addrs])
+        to_addrs = [to_addr.encode('utf-8') for to_addr in to_addrs]
+        return self.redis.pfadd(self.to_addr_key(batch_id), *to_addrs)
 
     @Manager.calls_manager
     def add_event(self, batch_id, event):
