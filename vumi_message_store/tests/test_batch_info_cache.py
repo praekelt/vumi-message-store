@@ -1359,3 +1359,149 @@ class TestBatchInfoCache(VumiTestCase):
             "delivery_report.pending": "0",
         })
         yield self.assert_redis_zset("batches:event:mybatch", event_keys[-2:])
+
+    @inlineCallbacks
+    def test_rebuild_cache_page_size_smaller_than_truncation(self):
+        """
+        Rebuilding the cache for a batch works even if the page size from the
+        query message store is smaller than the truncation point of the cache.
+        """
+        riak_persistence_helper = self.add_helper(
+            PersistenceHelper(use_riak=True))
+        manager = riak_persistence_helper.get_riak_manager()
+        self.add_cleanup(manager.close_manager)
+        qms = QueryMessageStore(manager, self.redis)
+        backend = qms.riak_backend
+
+        start = datetime.utcnow() - timedelta(seconds=10)
+
+        inbound_keys = []
+        for i in range(5):
+            msg = self.msg_helper.make_inbound(
+                "in %s" % (i,), timestamp=(start + timedelta(seconds=i)),
+                from_addr="addr %s" % i)
+            inbound_keys.append(
+                (msg["message_id"], to_timestamp(msg["timestamp"])))
+            yield backend.add_inbound_message(msg, batch_ids=["mybatch"])
+
+        outbound_msgs = []
+        outbound_keys = []
+        for i in range(4):
+            msg = self.msg_helper.make_outbound(
+                "out %s" % (i,), timestamp=(start + timedelta(seconds=i)),
+                to_addr="addr %s" % i)
+            outbound_msgs.append(msg)
+            outbound_keys.append(
+                (msg["message_id"], to_timestamp(msg["timestamp"])))
+            yield backend.add_outbound_message(msg, batch_ids=["mybatch"])
+
+        events = [
+            self.msg_helper.make_nack(
+                outbound_msgs[0], timestamp=(start + timedelta(seconds=1))),
+            self.msg_helper.make_ack(
+                outbound_msgs[1], timestamp=(start + timedelta(seconds=2))),
+            self.msg_helper.make_delivery_report(
+                outbound_msgs[1], timestamp=(start + timedelta(seconds=3))),
+        ]
+        event_keys = []
+        for event in events:
+            event_keys.append(
+                (event["event_id"], to_timestamp(event["timestamp"])))
+            yield backend.add_event(event, batch_ids=["mybatch"])
+
+        yield self.assert_redis_keys([])
+        self.batch_info_cache.TRUNCATE_MESSAGE_KEY_ZSET_AT = 3
+
+        yield self.batch_info_cache.rebuild_cache("mybatch", qms, page_size=2)
+        yield self.assert_redis_string("batches:inbound_count:mybatch", "5")
+        yield self.assert_redis_string("batches:outbound_count:mybatch", "4")
+        yield self.assert_redis_string("batches:event_count:mybatch", "3")
+        yield self.assert_redis_hash("batches:status:mybatch", {
+            "sent": "4",
+            "ack": "1",
+            "nack": "1",
+            "delivery_report": "1",
+            "delivery_report.delivered": "1",
+            "delivery_report.failed": "0",
+            "delivery_report.pending": "0",
+        })
+        yield self.assert_redis_zset("batches:inbound:mybatch",
+                                     inbound_keys[-3:])
+        yield self.assert_redis_zset("batches:outbound:mybatch",
+                                     outbound_keys[-3:])
+        yield self.assert_redis_zset("batches:event:mybatch", event_keys)
+        yield self.assert_redis_pfcount("batches:to_addr_hll:mybatch", 4)
+        yield self.assert_redis_pfcount("batches:from_addr_hll:mybatch", 5)
+
+    @inlineCallbacks
+    def test_rebuild_cache_page_size_larger_than_truncation(self):
+        """
+        Rebuilding the cache for a batch works even if the page size from the
+        query message store is larger than the truncation point of the cache.
+        """
+        riak_persistence_helper = self.add_helper(
+            PersistenceHelper(use_riak=True))
+        manager = riak_persistence_helper.get_riak_manager()
+        self.add_cleanup(manager.close_manager)
+        qms = QueryMessageStore(manager, self.redis)
+        backend = qms.riak_backend
+
+        start = datetime.utcnow() - timedelta(seconds=10)
+
+        inbound_keys = []
+        for i in range(5):
+            msg = self.msg_helper.make_inbound(
+                "in %s" % (i,), timestamp=(start + timedelta(seconds=i)),
+                from_addr="addr %s" % i)
+            inbound_keys.append(
+                (msg["message_id"], to_timestamp(msg["timestamp"])))
+            yield backend.add_inbound_message(msg, batch_ids=["mybatch"])
+
+        outbound_msgs = []
+        outbound_keys = []
+        for i in range(4):
+            msg = self.msg_helper.make_outbound(
+                "out %s" % (i,), timestamp=(start + timedelta(seconds=i)),
+                to_addr="addr %s" % i)
+            outbound_msgs.append(msg)
+            outbound_keys.append(
+                (msg["message_id"], to_timestamp(msg["timestamp"])))
+            yield backend.add_outbound_message(msg, batch_ids=["mybatch"])
+
+        events = [
+            self.msg_helper.make_nack(
+                outbound_msgs[0], timestamp=(start + timedelta(seconds=1))),
+            self.msg_helper.make_ack(
+                outbound_msgs[1], timestamp=(start + timedelta(seconds=2))),
+            self.msg_helper.make_delivery_report(
+                outbound_msgs[1], timestamp=(start + timedelta(seconds=3))),
+        ]
+        event_keys = []
+        for event in events:
+            event_keys.append(
+                (event["event_id"], to_timestamp(event["timestamp"])))
+            yield backend.add_event(event, batch_ids=["mybatch"])
+
+        yield self.assert_redis_keys([])
+        self.batch_info_cache.TRUNCATE_MESSAGE_KEY_ZSET_AT = 2
+
+        yield self.batch_info_cache.rebuild_cache("mybatch", qms, page_size=3)
+        yield self.assert_redis_string("batches:inbound_count:mybatch", "5")
+        yield self.assert_redis_string("batches:outbound_count:mybatch", "4")
+        yield self.assert_redis_string("batches:event_count:mybatch", "3")
+        yield self.assert_redis_hash("batches:status:mybatch", {
+            "sent": "4",
+            "ack": "1",
+            "nack": "1",
+            "delivery_report": "1",
+            "delivery_report.delivered": "1",
+            "delivery_report.failed": "0",
+            "delivery_report.pending": "0",
+        })
+        yield self.assert_redis_zset("batches:inbound:mybatch",
+                                     inbound_keys[-2:])
+        yield self.assert_redis_zset("batches:outbound:mybatch",
+                                     outbound_keys[-2:])
+        yield self.assert_redis_zset("batches:event:mybatch", event_keys[-2:])
+        yield self.assert_redis_pfcount("batches:to_addr_hll:mybatch", 4)
+        yield self.assert_redis_pfcount("batches:from_addr_hll:mybatch", 5)
