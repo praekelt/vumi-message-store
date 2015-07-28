@@ -183,6 +183,8 @@ class BatchInfoCache(object):
         """
         Add a from address to the HyperLogLog counter for the batch.
         """
+        if len(from_addrs) == 0:
+            return
         from_addrs = [from_addr.encode('utf-8') for from_addr in from_addrs]
         return self.redis.pfadd(self.from_addr_key(batch_id), *from_addrs)
 
@@ -213,6 +215,8 @@ class BatchInfoCache(object):
         """
         Add a from address to the HyperLogLog counter for the batch.
         """
+        if len(to_addrs) == 0:
+            return
         to_addrs = [to_addr.encode('utf-8') for to_addr in to_addrs]
         return self.redis.pfadd(self.to_addr_key(batch_id), *to_addrs)
 
@@ -369,10 +373,11 @@ class BatchInfoCache(object):
             batch_id, max_results=page_size)
         count = 0
         recents_added = False
-        from_addrs = set()
         while inbound_page is not None:
+            from_addrs = set()
             for key, timestamp, from_addr in inbound_page:
                 count += 1
+                from_addrs.add(from_addr)
                 # Treat the most recent messages as though we were recording
                 # them in flight.
                 if not recents_added:
@@ -382,17 +387,13 @@ class BatchInfoCache(object):
                     if count == self.TRUNCATE_MESSAGE_KEY_ZSET_AT:
                         recents_added = True
                         count = 0
-                else:
-                    from_addrs.add(from_addr)
 
+            yield self.add_from_addr(batch_id, *from_addrs)
             # After storing the most recent messages, count the rest, updating
             # the count in Redis after processing each page.
             if recents_added:
                 yield self.add_inbound_message_count(batch_id, count)
                 count = 0
-
-                yield self.add_from_addr(batch_id, *from_addrs)
-                from_addrs.clear()
 
             inbound_page = yield inbound_page.next_page()
 
@@ -406,30 +407,26 @@ class BatchInfoCache(object):
             batch_id, max_results=page_size)
         count = 0
         recents_added = False
-        to_addrs = set()
         while outbound_page is not None:
+            to_addrs = set()
             for key, timestamp, to_addr in outbound_page:
                 count += 1
+                to_addrs.add(to_addr)
                 # Treat the most recent messages as though we were recording
                 # them in flight.
                 if not recents_added:
                     yield self.add_outbound_message_key(
                         batch_id, key, to_timestamp(timestamp))
-                    yield self.add_to_addr(batch_id, to_addr)
                     if count == self.TRUNCATE_MESSAGE_KEY_ZSET_AT:
                         recents_added = True
                         count = 0
-                else:
-                    to_addrs.add(to_addr)
 
+            yield self.add_to_addr(batch_id, *to_addrs)
             # After storing the most recent messages, count the rest, updating
             # the count in Redis after processing each page.
             if recents_added:
                 yield self.add_outbound_message_count(batch_id, count)
                 count = 0
-
-                yield self.add_to_addr(batch_id, *to_addrs)
-                to_addrs.clear()
 
             outbound_page = yield outbound_page.next_page()
 
