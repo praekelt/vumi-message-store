@@ -238,8 +238,8 @@ class MessageStoreRiakBackend(object):
     def list_message_events(self, message_id, start=None, end=None,
                             max_results=None):
         """
-        List event keys with timestamps and statuses for the given outbound
-        message.
+        List event keys with timestamps and statuses in ascending timestamp
+        order for the given outbound message.
         """
         if max_results is None:
             max_results = self.DEFAULT_MAX_RESULTS
@@ -254,8 +254,8 @@ class MessageStoreRiakBackend(object):
     def list_batch_events(self, batch_id, start=None, end=None,
                           max_results=None):
         """
-        List event keys with timestamps and statuses for the given outbound
-        message.
+        List event keys with timestamps and statuses in descending timestamp
+        order for the given batch.
         """
         if max_results is None:
             max_results = self.DEFAULT_MAX_RESULTS

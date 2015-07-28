@@ -189,8 +189,8 @@ class QueryMessageStore(object):
     def list_message_events(self, message_id, start=None, end=None,
                             max_results=None):
         """
-        List event keys with timestamps and statuses for the given outbound
-        message.
+        List event keys with timestamps and statuses in ascending timestamp
+        order for the given outbound message.
         """
         return self.riak_backend.list_message_events(
             message_id, start=start, end=end, max_results=max_results)
@@ -198,8 +198,8 @@ class QueryMessageStore(object):
     def list_batch_events(self, batch_id, start=None, end=None,
                           max_results=None):
         """
-        List event keys with timestamps and statuses for the given outbound
-        message.
+        List event keys with timestamps and statuses in descending timestamp
+        order for the given batch.
         """
         return self.riak_backend.list_batch_events(
             batch_id, start=start, end=end, max_results=max_results)

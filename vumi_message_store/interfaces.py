@@ -240,7 +240,8 @@ class IQueryMessageStore(Interface):
 
         :returns:
             An IndexPage object containing a list of tuples of inbound message
-            key, timestamp, and from_addr.
+            key, timestamp, and from_addr. The list will be in descending
+            timestamp order.
             If async, a Deferred is returned instead.
         """
 
@@ -260,7 +261,8 @@ class IQueryMessageStore(Interface):
 
         :returns:
             An IndexPage object containing a list of tuples of outbound message
-            key, timestamp, and to_addr.
+            key, timestamp, and to_addr. The list will be in descending
+            timestamp order.
             If async, a Deferred is returned instead.
         """
 
@@ -280,7 +282,8 @@ class IQueryMessageStore(Interface):
 
         :returns:
             An IndexPage object containing a list tupled of event key,
-            timestamp, and event status.
+            timestamp, and event status. The list will be in ascending
+            timestamp order.
             If async, a Deferred is returned instead.
         """
 
@@ -299,7 +302,8 @@ class IQueryMessageStore(Interface):
 
         :returns:
             An IndexPage object containing a list of tuples of event key,
-            timestamp, and statuses.
+            timestamp, and event status. The list will be in descending
+            timestamp order.
             If async, a Deferred is returned instead.
         """
 
