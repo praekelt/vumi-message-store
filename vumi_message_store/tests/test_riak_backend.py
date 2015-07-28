@@ -685,266 +685,7 @@ class RiakBackendTestMixin(object):
         self.assertEqual(stored_record, None)
 
     @inlineCallbacks
-    def test_list_batch_inbound_keys(self):
-        """
-        When we ask for a list of inbound message keys, we get an IndexPage
-        containing the first page of results and can ask for following pages
-        until all results are delivered.
-        """
-        batch_id, all_keys = (
-            yield self.msg_seq_helper.create_inbound_message_sequence())
-        all_keys = sorted(key for key, _, _ in all_keys)
-
-        keys_p1 = yield self.backend.list_batch_inbound_keys(batch_id, 3)
-        # Paginated results are sorted by key.
-        self.assertEqual(sorted(keys_p1), all_keys[:3])
-
-        keys_p2 = yield keys_p1.next_page()
-        self.assertEqual(sorted(keys_p2), all_keys[3:])
-
-    @inlineCallbacks
-    def test_list_batch_inbound_keys_empty(self):
-        """
-        When we ask for a list of inbound message keys for an empty batch, we
-        get an empty IndexPage.
-        """
-        batch_id = yield self.backend.batch_start()
-        keys_page = yield self.backend.list_batch_inbound_keys(batch_id)
-        self.assertEqual(list(keys_page), [])
-
-    @inlineCallbacks
-    def test_list_batch_outbound_keys(self):
-        """
-        When we ask for a list of outbound message keys, we get an IndexPage
-        containing the first page of results and can ask for following pages
-        until all results are delivered.
-        """
-        batch_id, all_keys = (
-            yield self.msg_seq_helper.create_outbound_message_sequence())
-        all_keys = sorted(key for key, _, _ in all_keys)
-
-        keys_p1 = yield self.backend.list_batch_outbound_keys(batch_id, 3)
-        # Paginated results are sorted by key.
-        self.assertEqual(sorted(keys_p1), all_keys[:3])
-
-        keys_p2 = yield keys_p1.next_page()
-        self.assertEqual(sorted(keys_p2), all_keys[3:])
-
-    @inlineCallbacks
-    def test_list_batch_outbound_keys_empty(self):
-        """
-        When we ask for a list of outbound message keys for an empty batch, we
-        get an empty IndexPage.
-        """
-        batch_id = yield self.backend.batch_start()
-        keys_page = yield self.backend.list_batch_outbound_keys(batch_id)
-        self.assertEqual(list(keys_page), [])
-
-    @inlineCallbacks
-    def test_list_message_event_keys(self):
-        """
-        When we ask for a list of outbound message keys, we get an IndexPage
-        containing the first page of results and can ask for following pages
-        until all results are delivered.
-        """
-        batch_id = yield self.backend.batch_start()
-        msg = self.msg_helper.make_outbound("pears")
-        yield self.backend.add_outbound_message(msg, batch_ids=[batch_id])
-        events = [
-            self.msg_helper.make_ack(msg),
-            self.msg_helper.make_delivery_report(msg),
-            self.msg_helper.make_delivery_report(msg),
-            self.msg_helper.make_delivery_report(msg),
-            self.msg_helper.make_delivery_report(msg),
-        ]
-        for event in events:
-            yield self.backend.add_event(event)
-        all_keys = sorted(event["event_id"] for event in events)
-
-        keys_p1 = yield self.backend.list_message_event_keys(
-            msg["message_id"], 3)
-        # Paginated results are sorted by key.
-        self.assertEqual(sorted(keys_p1), all_keys[:3])
-
-        keys_p2 = yield keys_p1.next_page()
-        self.assertEqual(sorted(keys_p2), all_keys[3:])
-
-    @inlineCallbacks
-    def test_list_message_event_keys_empty(self):
-        """
-        When we ask for a list of event keys for a message with no events, we
-        get an empty IndexPage.
-        """
-        batch_id = yield self.backend.batch_start()
-        msg = self.msg_helper.make_outbound("pears")
-        yield self.backend.add_outbound_message(msg, batch_ids=[batch_id])
-
-        keys_page = yield self.backend.list_message_event_keys(
-            msg["message_id"])
-        self.assertEqual(list(keys_page), [])
-
-    @inlineCallbacks
-    def test_list_batch_inbound_keys_with_timestamps(self):
-        """
-        When we ask for a list of inbound message keys with timestamps, we get
-        an IndexPageWrapper containing the first page of results and can ask
-        for following pages until all results are delivered.
-        """
-        batch_id, all_keys = (
-            yield self.msg_seq_helper.create_inbound_message_sequence())
-        all_keys = [(key, ts) for key, ts, _ in all_keys]
-        keys_p1 = yield self.backend.list_batch_inbound_keys_with_timestamps(
-            batch_id, max_results=3)
-        # Paginated results are sorted by descending timestamp.
-        self.assertEqual(list(keys_p1), all_keys[:3])
-
-        keys_p2 = yield keys_p1.next_page()
-        self.assertEqual(list(keys_p2), all_keys[3:])
-
-    @inlineCallbacks
-    def test_list_batch_inbound_keys_with_timestamps_range_start(self):
-        """
-        When we ask for a list of inbound message keys with timestamps, we can
-        specify a start timestamp.
-        """
-        batch_id, all_keys = (
-            yield self.msg_seq_helper.create_inbound_message_sequence())
-        all_keys = [(key, ts) for key, ts, _ in all_keys]
-        keys_p1 = yield self.backend.list_batch_inbound_keys_with_timestamps(
-            batch_id, start=all_keys[-2][1], max_results=3)
-        # Paginated results are sorted by descending timestamp.
-        self.assertEqual(list(keys_p1), all_keys[0:3])
-
-        keys_p2 = yield keys_p1.next_page()
-        self.assertEqual(list(keys_p2), all_keys[3:-1])
-
-    @inlineCallbacks
-    def test_list_batch_inbound_keys_with_timestamps_range_end(self):
-        """
-        When we ask for a list of inbound message keys with timestamps, we can
-        specify an end timestamp.
-        """
-        batch_id, all_keys = (
-            yield self.msg_seq_helper.create_inbound_message_sequence())
-        all_keys = [(key, ts) for key, ts, _ in all_keys]
-        keys_p1 = yield self.backend.list_batch_inbound_keys_with_timestamps(
-            batch_id, end=all_keys[1][1], max_results=3)
-        # Paginated results are sorted by descending timestamp.
-        self.assertEqual(list(keys_p1), all_keys[1:4])
-
-        keys_p2 = yield keys_p1.next_page()
-        self.assertEqual(list(keys_p2), all_keys[4:])
-
-    @inlineCallbacks
-    def test_list_batch_inbound_keys_with_timestamps_range(self):
-        """
-        When we ask for a list of inbound message keys with timestamps, we can
-        specify both ends of the range.
-        """
-        batch_id, all_keys = (
-            yield self.msg_seq_helper.create_inbound_message_sequence())
-        all_keys = [(key, ts) for key, ts, _ in all_keys]
-        keys_p1 = yield self.backend.list_batch_inbound_keys_with_timestamps(
-            batch_id, start=all_keys[-2][1], end=all_keys[1][1], max_results=2)
-        # Paginated results are sorted by descending timestamp.
-        self.assertEqual(list(keys_p1), all_keys[1:3])
-
-        keys_p2 = yield keys_p1.next_page()
-        self.assertEqual(list(keys_p2), all_keys[3:-1])
-
-    @inlineCallbacks
-    def test_list_batch_inbound_keys_with_timestamps_empty(self):
-        """
-        When we ask for a list of inbound message keys with timestamps for an
-        empty batch, we get an empty IndexPageWrapper.
-        """
-        batch_id = yield self.backend.batch_start()
-        keys_page = yield self.backend.list_batch_inbound_keys_with_timestamps(
-            batch_id)
-        self.assertEqual(list(keys_page), [])
-
-    @inlineCallbacks
-    def test_list_batch_outbound_keys_with_timestamps(self):
-        """
-        When we ask for a list of outbound message keys with timestamps, we get
-        an IndexPageWrapper containing the first page of results and can ask
-        for following pages until all results are delivered.
-        """
-        batch_id, all_keys = (
-            yield self.msg_seq_helper.create_outbound_message_sequence())
-        all_keys = [(key, ts) for key, ts, _ in all_keys]
-        keys_p1 = yield self.backend.list_batch_outbound_keys_with_timestamps(
-            batch_id, max_results=3)
-        # Paginated results are sorted by descending timestamp.
-        self.assertEqual(list(keys_p1), all_keys[:3])
-
-        keys_p2 = yield keys_p1.next_page()
-        self.assertEqual(list(keys_p2), all_keys[3:])
-
-    @inlineCallbacks
-    def test_list_batch_outbound_keys_with_timestamps_range_start(self):
-        """
-        When we ask for a list of outbound message keys with timestamps, we can
-        specify a start timestamp.
-        """
-        batch_id, all_keys = (
-            yield self.msg_seq_helper.create_outbound_message_sequence())
-        all_keys = [(key, ts) for key, ts, _ in all_keys]
-        keys_p1 = yield self.backend.list_batch_outbound_keys_with_timestamps(
-            batch_id, start=all_keys[-2][1], max_results=3)
-        # Paginated results are sorted by descending timestamp.
-        self.assertEqual(list(keys_p1), all_keys[0:3])
-
-        keys_p2 = yield keys_p1.next_page()
-        self.assertEqual(list(keys_p2), all_keys[3:-1])
-
-    @inlineCallbacks
-    def test_list_batch_outbound_keys_with_timestamps_range_end(self):
-        """
-        When we ask for a list of outbound message keys with timestamps, we can
-        specify an end timestamp.
-        """
-        batch_id, all_keys = (
-            yield self.msg_seq_helper.create_outbound_message_sequence())
-        all_keys = [(key, ts) for key, ts, _ in all_keys]
-        keys_p1 = yield self.backend.list_batch_outbound_keys_with_timestamps(
-            batch_id, end=all_keys[1][1], max_results=3)
-        # Paginated results are sorted by descending timestamp.
-        self.assertEqual(list(keys_p1), all_keys[1:4])
-
-        keys_p2 = yield keys_p1.next_page()
-        self.assertEqual(list(keys_p2), all_keys[4:])
-
-    @inlineCallbacks
-    def test_list_batch_outbound_keys_with_timestamps_range(self):
-        """
-        When we ask for a list of outbound message keys with timestamps, we can
-        specify both ends of the range.
-        """
-        batch_id, all_keys = (
-            yield self.msg_seq_helper.create_outbound_message_sequence())
-        all_keys = [(key, ts) for key, ts, _ in all_keys]
-        keys_p1 = yield self.backend.list_batch_outbound_keys_with_timestamps(
-            batch_id, start=all_keys[-2][1], end=all_keys[1][1], max_results=2)
-        # Paginated results are sorted by descending timestamp.
-        self.assertEqual(list(keys_p1), all_keys[1:3])
-
-        keys_p2 = yield keys_p1.next_page()
-        self.assertEqual(list(keys_p2), all_keys[3:-1])
-
-    @inlineCallbacks
-    def test_list_batch_outbound_keys_with_timestamps_empty(self):
-        """
-        When we ask for a list of outbound message keys with timestamps for an
-        empty batch, we get an empty IndexPageWrapper.
-        """
-        batch_id = yield self.backend.batch_start()
-        page = yield self.backend.list_batch_outbound_keys_with_timestamps(
-            batch_id)
-        self.assertEqual(list(page), [])
-
-    @inlineCallbacks
-    def test_list_batch_inbound_keys_with_addresses(self):
+    def test_list_batch_inbound_messages(self):
         """
         When we ask for a list of inbound message keys with addresses, we get
         an IndexPageWrapper containing the first page of results and can ask
@@ -952,7 +693,7 @@ class RiakBackendTestMixin(object):
         """
         batch_id, all_keys = (
             yield self.msg_seq_helper.create_inbound_message_sequence())
-        keys_p1 = yield self.backend.list_batch_inbound_keys_with_addresses(
+        keys_p1 = yield self.backend.list_batch_inbound_messages(
             batch_id, max_results=3)
         # Paginated results are sorted by descending timestamp.
         self.assertEqual(list(keys_p1), all_keys[:3])
@@ -961,14 +702,14 @@ class RiakBackendTestMixin(object):
         self.assertEqual(list(keys_p2), all_keys[3:])
 
     @inlineCallbacks
-    def test_list_batch_inbound_keys_with_addresses_range_start(self):
+    def test_list_batch_inbound_messages_range_start(self):
         """
         When we ask for a list of inbound message keys with addresses, we can
         specify a start timestamp.
         """
         batch_id, all_keys = (
             yield self.msg_seq_helper.create_inbound_message_sequence())
-        keys_p1 = yield self.backend.list_batch_inbound_keys_with_addresses(
+        keys_p1 = yield self.backend.list_batch_inbound_messages(
             batch_id, start=all_keys[-2][1], max_results=3)
         # Paginated results are sorted by descending timestamp.
         self.assertEqual(list(keys_p1), all_keys[0:3])
@@ -977,14 +718,14 @@ class RiakBackendTestMixin(object):
         self.assertEqual(list(keys_p2), all_keys[3:-1])
 
     @inlineCallbacks
-    def test_list_batch_inbound_keys_with_addresses_range_end(self):
+    def test_list_batch_inbound_messages_range_end(self):
         """
         When we ask for a list of inbound message keys with addresses, we can
         specify an end timestamp.
         """
         batch_id, all_keys = (
             yield self.msg_seq_helper.create_inbound_message_sequence())
-        keys_p1 = yield self.backend.list_batch_inbound_keys_with_addresses(
+        keys_p1 = yield self.backend.list_batch_inbound_messages(
             batch_id, end=all_keys[1][1], max_results=3)
         # Paginated results are sorted by descending timestamp.
         self.assertEqual(list(keys_p1), all_keys[1:4])
@@ -993,14 +734,14 @@ class RiakBackendTestMixin(object):
         self.assertEqual(list(keys_p2), all_keys[4:])
 
     @inlineCallbacks
-    def test_list_batch_inbound_keys_with_addresses_range(self):
+    def test_list_batch_inbound_messages_range(self):
         """
         When we ask for a list of inbound message keys with addresses, we can
         specify both ends of the range.
         """
         batch_id, all_keys = (
             yield self.msg_seq_helper.create_inbound_message_sequence())
-        keys_p1 = yield self.backend.list_batch_inbound_keys_with_addresses(
+        keys_p1 = yield self.backend.list_batch_inbound_messages(
             batch_id, start=all_keys[-2][1], end=all_keys[1][1], max_results=2)
         # Paginated results are sorted by descending timestamp.
         self.assertEqual(list(keys_p1), all_keys[1:3])
@@ -1009,18 +750,17 @@ class RiakBackendTestMixin(object):
         self.assertEqual(list(keys_p2), all_keys[3:-1])
 
     @inlineCallbacks
-    def test_list_batch_inbound_keys_with_addresses_empty(self):
+    def test_list_batch_inbound_messages_empty(self):
         """
         When we ask for a list of inbound message keys with addresses for an
         empty batch, we get an empty IndexPageWrapper.
         """
         batch_id = yield self.backend.batch_start()
-        keys_page = yield self.backend.list_batch_inbound_keys_with_addresses(
-            batch_id)
+        keys_page = yield self.backend.list_batch_inbound_messages(batch_id)
         self.assertEqual(list(keys_page), [])
 
     @inlineCallbacks
-    def test_list_batch_outbound_keys_with_addresses(self):
+    def test_list_batch_outbound_messages(self):
         """
         When we ask for a list of outbound message keys with addresses, we get
         an IndexPageWrapper containing the first page of results and can ask
@@ -1028,7 +768,7 @@ class RiakBackendTestMixin(object):
         """
         batch_id, all_keys = (
             yield self.msg_seq_helper.create_outbound_message_sequence())
-        keys_p1 = yield self.backend.list_batch_outbound_keys_with_addresses(
+        keys_p1 = yield self.backend.list_batch_outbound_messages(
             batch_id, max_results=3)
         # Paginated results are sorted by descending timestamp.
         self.assertEqual(list(keys_p1), all_keys[:3])
@@ -1037,14 +777,14 @@ class RiakBackendTestMixin(object):
         self.assertEqual(list(keys_p2), all_keys[3:])
 
     @inlineCallbacks
-    def test_list_batch_outbound_keys_with_addresses_range_start(self):
+    def test_list_batch_outbound_messages_range_start(self):
         """
         When we ask for a list of outbound message keys with addresses, we can
         specify a start timestamp.
         """
         batch_id, all_keys = (
             yield self.msg_seq_helper.create_outbound_message_sequence())
-        keys_p1 = yield self.backend.list_batch_outbound_keys_with_addresses(
+        keys_p1 = yield self.backend.list_batch_outbound_messages(
             batch_id, start=all_keys[-2][1], max_results=3)
         # Paginated results are sorted by descending timestamp.
         self.assertEqual(list(keys_p1), all_keys[0:3])
@@ -1053,14 +793,14 @@ class RiakBackendTestMixin(object):
         self.assertEqual(list(keys_p2), all_keys[3:-1])
 
     @inlineCallbacks
-    def test_list_batch_outbound_keys_with_addresses_range_end(self):
+    def test_list_batch_outbound_messages_range_end(self):
         """
         When we ask for a list of outbound message keys with addresses, we can
         specify an end timestamp.
         """
         batch_id, all_keys = (
             yield self.msg_seq_helper.create_outbound_message_sequence())
-        keys_p1 = yield self.backend.list_batch_outbound_keys_with_addresses(
+        keys_p1 = yield self.backend.list_batch_outbound_messages(
             batch_id, end=all_keys[1][1], max_results=3)
         # Paginated results are sorted by descending timestamp.
         self.assertEqual(list(keys_p1), all_keys[1:4])
@@ -1069,14 +809,14 @@ class RiakBackendTestMixin(object):
         self.assertEqual(list(keys_p2), all_keys[4:])
 
     @inlineCallbacks
-    def test_list_batch_outbound_keys_with_addresses_range(self):
+    def test_list_batch_outbound_messages_range(self):
         """
         When we ask for a list of outbound message keys with addresses, we can
         specify both ends of the range.
         """
         batch_id, all_keys = (
             yield self.msg_seq_helper.create_outbound_message_sequence())
-        keys_p1 = yield self.backend.list_batch_outbound_keys_with_addresses(
+        keys_p1 = yield self.backend.list_batch_outbound_messages(
             batch_id, start=all_keys[-2][1], end=all_keys[1][1], max_results=2)
         # Paginated results are sorted by descending timestamp.
         self.assertEqual(list(keys_p1), all_keys[1:3])
@@ -1085,18 +825,17 @@ class RiakBackendTestMixin(object):
         self.assertEqual(list(keys_p2), all_keys[3:-1])
 
     @inlineCallbacks
-    def test_list_batch_outbound_keys_with_addresses_empty(self):
+    def test_list_batch_outbound_messages_empty(self):
         """
         When we ask for a list of outbound message keys with addresses for an
         empty batch, we get an empty IndexPageWrapper.
         """
         batch_id = yield self.backend.batch_start()
-        keys_page = yield self.backend.list_batch_outbound_keys_with_addresses(
-            batch_id)
+        keys_page = yield self.backend.list_batch_outbound_messages(batch_id)
         self.assertEqual(list(keys_page), [])
 
     @inlineCallbacks
-    def test_list_message_event_keys_with_statuses(self):
+    def test_list_message_events(self):
         """
         When we ask for a list of event keys with statuses, we get an
         IndexPageWrapper containing the first page of results and can ask for
@@ -1105,8 +844,7 @@ class RiakBackendTestMixin(object):
         batch_id, msg_id, all_keys = (
             yield self.msg_seq_helper.create_ack_event_sequence())
 
-        keys_p1 = yield self.backend.list_message_event_keys_with_statuses(
-            msg_id, max_results=3)
+        keys_p1 = yield self.backend.list_message_events(msg_id, max_results=3)
         # Paginated results are sorted by ascending timestamp.
         all_keys.reverse()
         self.assertEqual(list(keys_p1), all_keys[:3])
@@ -1115,7 +853,7 @@ class RiakBackendTestMixin(object):
         self.assertEqual(list(keys_p2), all_keys[3:])
 
     @inlineCallbacks
-    def test_list_message_event_keys_with_statuses_no_events(self):
+    def test_list_message_events_no_events(self):
         """
         When we ask for a list of event keys with statuses for a message with
         no events, we get an empty IndexPageWrapper.
@@ -1123,18 +861,16 @@ class RiakBackendTestMixin(object):
         batch_id = yield self.backend.batch_start()
         msg = self.msg_helper.make_outbound("hello")
         yield self.backend.add_outbound_message(msg, batch_ids=[batch_id])
-        keys_page = yield self.backend.list_message_event_keys_with_statuses(
-            msg["message_id"])
+        keys_page = yield self.backend.list_message_events(msg["message_id"])
         self.assertEqual(list(keys_page), [])
 
     @inlineCallbacks
-    def test_list_message_event_keys_with_statuses_no_message(self):
+    def test_list_message_events_no_message(self):
         """
         When we ask for a list of event keys with statuses for a message that
         does not exist, we get an empty IndexPageWrapper.
         """
-        keys_page = yield self.backend.list_message_event_keys_with_statuses(
-            "badmsg")
+        keys_page = yield self.backend.list_message_events("badmsg")
         self.assertEqual(list(keys_page), [])
 
     @inlineCallbacks
@@ -1208,8 +944,7 @@ class RiakBackendTestMixin(object):
         empty IndexPageWrapper.
         """
         batch_id = yield self.backend.batch_start()
-        keys_page = yield self.backend.list_batch_events(
-            batch_id)
+        keys_page = yield self.backend.list_batch_events(batch_id)
         self.assertEqual(list(keys_page), [])
 
 

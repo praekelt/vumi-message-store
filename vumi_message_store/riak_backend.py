@@ -177,39 +177,6 @@ class MessageStoreRiakBackend(object):
         event = yield self.get_raw_event(event_id)
         returnValue(event.event if event is not None else None)
 
-    def list_batch_inbound_keys(self, batch_id, max_results=None,
-                                continuation=None):
-        """
-        List inbound message keys for the given batch.
-        """
-        if max_results is None:
-            max_results = self.DEFAULT_MAX_RESULTS
-        return self.inbound_messages.index_keys_page(
-            'batches', batch_id, max_results=max_results,
-            continuation=continuation)
-
-    def list_batch_outbound_keys(self, batch_id, max_results=None,
-                                 continuation=None):
-        """
-        List outbound message keys for the given batch.
-        """
-        if max_results is None:
-            max_results = self.DEFAULT_MAX_RESULTS
-        return self.outbound_messages.index_keys_page(
-            'batches', batch_id, max_results=max_results,
-            continuation=continuation)
-
-    def list_message_event_keys(self, message_id, max_results=None,
-                                continuation=None):
-        """
-        List event keys for the given outbound message.
-        """
-        if max_results is None:
-            max_results = self.DEFAULT_MAX_RESULTS
-        return self.events.index_keys_page(
-            'message', message_id, max_results=max_results,
-            continuation=continuation)
-
     def _start_end_range(self, batch_id, start, end):
         if start is not None:
             start_value = "%s$%s" % (batch_id, start)
@@ -234,40 +201,8 @@ class MessageStoreRiakBackend(object):
         return self._start_end_range(batch_id, start, end)
 
     @Manager.calls_manager
-    def list_batch_inbound_keys_with_timestamps(self, batch_id, start=None,
-                                                end=None, max_results=None):
-        """
-        List inbound message keys with timestamps for the given batch.
-        """
-        if max_results is None:
-            max_results = self.DEFAULT_MAX_RESULTS
-        start_range, end_range = (
-            self._start_end_range_reverse(batch_id, start, end))
-        results = yield self.inbound_messages.index_keys_page(
-            'batches_with_addresses_reverse', start_range, end_range,
-            return_terms=True, max_results=max_results)
-        returnValue(IndexPageWrapper(
-            key_with_rts_only_formatter, self, batch_id, results))
-
-    @Manager.calls_manager
-    def list_batch_outbound_keys_with_timestamps(self, batch_id, start=None,
-                                                 end=None, max_results=None):
-        """
-        List outbound message keys with timestamps for the given batch.
-        """
-        if max_results is None:
-            max_results = self.DEFAULT_MAX_RESULTS
-        start_range, end_range = (
-            self._start_end_range_reverse(batch_id, start, end))
-        results = yield self.outbound_messages.index_keys_page(
-            'batches_with_addresses_reverse', start_range, end_range,
-            return_terms=True, max_results=max_results)
-        returnValue(IndexPageWrapper(
-            key_with_rts_only_formatter, self, batch_id, results))
-
-    @Manager.calls_manager
-    def list_batch_inbound_keys_with_addresses(self, batch_id, start=None,
-                                               end=None, max_results=None):
+    def list_batch_inbound_messages(self, batch_id, start=None, end=None,
+                                    max_results=None):
         """
         List inbound message keys with timestamps and addresses in descending
         timestamp order for the given batch.
@@ -283,8 +218,8 @@ class MessageStoreRiakBackend(object):
             key_with_rts_and_value_formatter, self, batch_id, results))
 
     @Manager.calls_manager
-    def list_batch_outbound_keys_with_addresses(self, batch_id, start=None,
-                                                end=None, max_results=None):
+    def list_batch_outbound_messages(self, batch_id, start=None, end=None,
+                                     max_results=None):
         """
         List outbound message keys with timestamps and addresses in descending
         timestamp order for the given batch.
@@ -300,8 +235,7 @@ class MessageStoreRiakBackend(object):
             key_with_rts_and_value_formatter, self, batch_id, results))
 
     @Manager.calls_manager
-    def list_message_event_keys_with_statuses(self, message_id,
-                                              max_results=None):
+    def list_message_events(self, message_id, max_results=None):
         """
         List event keys with timestamps and statuses for the given outbound
         message.
@@ -405,8 +339,3 @@ def key_with_ts_and_value_formatter(batch_id, result):
 def key_with_rts_and_value_formatter(batch_id, result):
     key, reverse_ts, value = key_with_ts_and_value_formatter(batch_id, result)
     return (key, from_reverse_timestamp(reverse_ts), value)
-
-
-def key_with_rts_only_formatter(batch_id, result):
-    key, reverse_ts, value = key_with_ts_and_value_formatter(batch_id, result)
-    return (key, from_reverse_timestamp(reverse_ts))

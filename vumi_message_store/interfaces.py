@@ -224,85 +224,7 @@ class IQueryMessageStore(Interface):
             If async, a Deferred is returned instead.
         """
 
-    def list_batch_inbound_keys(batch_id, max_results=None, continuation=None):
-        """
-        List inbound message keys for the given batch.
-
-        :param batch_id:
-            The batch identifier for the batch to operate on.
-
-        :returns:
-            An IndexPage object containing a list of inbound message keys.
-            If async, a Deferred is returned instead.
-        """
-
-    def list_batch_outbound_keys(batch_id, max_results=None,
-                                 continuation=None):
-        """
-        List outbound message keys for the given batch.
-
-        :param batch_id:
-            The batch identifier for the batch to operate on.
-
-        :returns:
-            An IndexPage object containing a list of outbound message keys.
-            If async, a Deferred is returned instead.
-        """
-
-    def list_message_event_keys(message_id, max_results=None,
-                                continuation=None):
-        """
-        List event keys for the given outbound message.
-
-        :param message_id:
-            The message identifier to find events for.
-
-        :returns:
-            An IndexPage object containing a list of event keys.
-            If async, a Deferred is returned instead.
-        """
-
-    def list_batch_inbound_keys_with_timestamps(batch_id, start=None,
-                                                end=None):
-        """
-        List inbound message keys with timestamps for the given batch.
-
-        :param batch_id:
-            The batch identifier for the batch to operate on.
-
-        :param start:
-            Timestamp denoting the start of a range query.
-
-        :param end:
-            Timestamp denoting the end of a range query.
-
-        :returns:
-            An IndexPage object containing a list of tuples of inbound message
-            key and timestamp.
-            If async, a Deferred is returned instead.
-        """
-
-    def list_batch_outbound_keys_with_timestamps(batch_id, start=None,
-                                                 end=None):
-        """
-        List outbound message keys with timestamps for the given batch.
-
-        :param batch_id:
-            The batch identifier for the batch to operate on.
-
-        :param start:
-            Timestamp denoting the start of a range query.
-
-        :param end:
-            Timestamp denoting the end of a range query.
-
-        :returns:
-            An IndexPage object containing a list of tuples of outbound message
-            key and timestamp.
-            If async, a Deferred is returned instead.
-        """
-
-    def list_batch_inbound_keys_with_addresses(batch_id, start=None, end=None):
+    def list_batch_inbound_messages(batch_id, start=None, end=None):
         """
         List inbound message keys with timestamps and source addresses for the
         given batch.
@@ -322,8 +244,7 @@ class IQueryMessageStore(Interface):
             If async, a Deferred is returned instead.
         """
 
-    def list_batch_outbound_keys_with_addresses(batch_id, start=None,
-                                                end=None):
+    def list_batch_outbound_messages(batch_id, start=None, end=None):
         """
         List outbound message keys with timestamps and destination addresses
         for the given batch.
@@ -343,7 +264,7 @@ class IQueryMessageStore(Interface):
             If async, a Deferred is returned instead.
         """
 
-    def list_message_event_keys_with_statuses(message_id):
+    def list_message_events(message_id):
         """
         List event keys with timestamps and statuses for the given outbound
         message.

@@ -365,7 +365,7 @@ class BatchInfoCache(object):
         Rebuild the cache by loading the latest inbound messages for the given
         batch into the cache and counting all the messages.
         """
-        inbound_page = yield qms.list_batch_inbound_keys_with_addresses(
+        inbound_page = yield qms.list_batch_inbound_messages(
             batch_id, max_results=page_size)
         count = 0
         recents_added = False
@@ -402,7 +402,7 @@ class BatchInfoCache(object):
         Rebuild the cache by loading the latest outbound messages for the given
         batch into the cache and counting all the messages.
         """
-        outbound_page = yield qms.list_batch_outbound_keys_with_addresses(
+        outbound_page = yield qms.list_batch_outbound_messages(
             batch_id, max_results=page_size)
         count = 0
         recents_added = False
