@@ -301,6 +301,26 @@ class TestBatchInfoCache(VumiTestCase):
         yield self.assert_redis_pfcount("batches:from_addr_hll:mybatch", 2)
 
     @inlineCallbacks
+    def test_add_unicode_from_addr(self):
+        """
+        Adding a from_addr with unicode characters updates the HyperLogLog
+        counter for the batch.
+        """
+        yield self.batch_info_cache.batch_start("mybatch")
+        incr = yield self.batch_info_cache.add_from_addr("mybatch", u"Zoë")
+        self.assertEqual(incr, 1)
+
+        yield self.assert_redis_keys([
+            "batches",
+            "batches:inbound_count:mybatch",
+            "batches:outbound_count:mybatch",
+            "batches:event_count:mybatch",
+            "batches:status:mybatch",
+            "batches:from_addr_hll:mybatch",
+        ])
+        yield self.assert_redis_pfcount("batches:from_addr_hll:mybatch", 1)
+
+    @inlineCallbacks
     def test_add_outbound_message(self):
         """
         Adding an outbound message updates the relevant counters and adds the
@@ -454,6 +474,26 @@ class TestBatchInfoCache(VumiTestCase):
         incr = yield self.batch_info_cache.add_to_addr("mybatch", "addr-1")
         self.assertEqual(incr, 0)
         yield self.assert_redis_pfcount("batches:to_addr_hll:mybatch", 2)
+
+    @inlineCallbacks
+    def test_add_unicode_to_addr(self):
+        """
+        Adding a to_addr with unicode characters updates the HyperLogLog
+        counter for the batch.
+        """
+        yield self.batch_info_cache.batch_start("mybatch")
+        incr = yield self.batch_info_cache.add_to_addr("mybatch", u"Zoë")
+        self.assertEqual(incr, 1)
+
+        yield self.assert_redis_keys([
+            "batches",
+            "batches:inbound_count:mybatch",
+            "batches:outbound_count:mybatch",
+            "batches:event_count:mybatch",
+            "batches:status:mybatch",
+            "batches:to_addr_hll:mybatch",
+        ])
+        yield self.assert_redis_pfcount("batches:to_addr_hll:mybatch", 1)
 
     @inlineCallbacks
     def test_add_event_ack(self):
