@@ -857,7 +857,58 @@ class TestQueryMessageStore(VumiTestCase):
         self.assertEqual(list(keys_p2), all_keys[3:])
 
     @inlineCallbacks
-    def test_list_message_events_no_events(self):
+    def test_list_message_events_range_start(self):
+        """
+        When we ask for a list of event keys for a message, we can specify a
+        start timestamp.
+        """
+        batch_id, msg_id, all_keys = (
+            yield self.msg_seq_helper.create_ack_event_sequence())
+        keys_p1 = yield self.store.list_message_events(
+            msg_id, start=all_keys[-2][1], max_results=3)
+        # Paginated results are sorted by ascending timestamp.
+        all_keys.reverse()
+        self.assertEqual(list(keys_p1), all_keys[1:4])
+
+        keys_p2 = yield keys_p1.next_page()
+        self.assertEqual(list(keys_p2), all_keys[4:])
+
+    @inlineCallbacks
+    def test_list_message_events_range_end(self):
+        """
+        When we ask for a list of event keys for a message, we can specify an
+        end timestamp.
+        """
+        batch_id, msg_id, all_keys = (
+            yield self.msg_seq_helper.create_ack_event_sequence())
+        keys_p1 = yield self.store.list_message_events(
+            msg_id, end=all_keys[1][1], max_results=3)
+        # Paginated results are sorted by ascending timestamp.
+        all_keys.reverse()
+        self.assertEqual(list(keys_p1), all_keys[0:3])
+
+        keys_p2 = yield keys_p1.next_page()
+        self.assertEqual(list(keys_p2), all_keys[3:-1])
+
+    @inlineCallbacks
+    def test_list_message_events_range(self):
+        """
+        When we ask for a list of event keys for a message, we can specify both
+        ends of the range.
+        """
+        batch_id, msg_id, all_keys = (
+            yield self.msg_seq_helper.create_ack_event_sequence())
+        keys_p1 = yield self.store.list_message_events(
+            msg_id, start=all_keys[-2][1], end=all_keys[1][1], max_results=2)
+        # Paginated results are sorted by ascending timestamp.
+        all_keys.reverse()
+        self.assertEqual(list(keys_p1), all_keys[1:3])
+
+        keys_p2 = yield keys_p1.next_page()
+        self.assertEqual(list(keys_p2), all_keys[3:-1])
+
+    @inlineCallbacks
+    def test_list_message_events_empty(self):
         """
         When we ask for a list of event keys with statuses for a message with
         no events, we get an empty IndexPageWrapper.

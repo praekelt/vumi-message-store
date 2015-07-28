@@ -235,14 +235,15 @@ class MessageStoreRiakBackend(object):
             key_with_rts_and_value_formatter, self, batch_id, results))
 
     @Manager.calls_manager
-    def list_message_events(self, message_id, max_results=None):
+    def list_message_events(self, message_id, start=None, end=None,
+                            max_results=None):
         """
         List event keys with timestamps and statuses for the given outbound
         message.
         """
         if max_results is None:
             max_results = self.DEFAULT_MAX_RESULTS
-        start_value, end_value = self._start_end_range(message_id, None, None)
+        start_value, end_value = self._start_end_range(message_id, start, end)
         results = yield self.events.index_keys_page(
             'message_with_status', start_value, end_value, return_terms=True,
             max_results=max_results)

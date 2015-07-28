@@ -264,13 +264,19 @@ class IQueryMessageStore(Interface):
             If async, a Deferred is returned instead.
         """
 
-    def list_message_events(message_id):
+    def list_message_events(message_id, start=None, end=None):
         """
         List event keys with timestamps and statuses for the given outbound
         message.
 
         :param message_id:
             The message identifier to find events for.
+
+        :param start:
+            Timestamp denoting the start of a range query.
+
+        :param end:
+            Timestamp denoting the end of a range query.
 
         :returns:
             An IndexPage object containing a list tupled of event key,
