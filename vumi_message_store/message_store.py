@@ -168,83 +168,41 @@ class QueryMessageStore(object):
         """
         return self.riak_backend.get_event(event_id)
 
-    def list_batch_inbound_keys(self, batch_id, max_results=None,
-                                continuation=None):
-        """
-        List inbound message keys for the given batch.
-        """
-        return self.riak_backend.list_batch_inbound_keys(
-            batch_id, max_results=max_results, continuation=continuation)
-
-    def list_batch_outbound_keys(self, batch_id, max_results=None,
-                                 continuation=None):
-        """
-        List outbound message keys for the given batch.
-        """
-        return self.riak_backend.list_batch_outbound_keys(
-            batch_id, max_results=max_results, continuation=continuation)
-
-    def list_message_event_keys(self, message_id, max_results=None,
-                                continuation=None):
-        """
-        List event keys for the given outbound message.
-        """
-        return self.riak_backend.list_message_event_keys(
-            message_id, max_results=max_results, continuation=continuation)
-
-    def list_batch_inbound_keys_with_timestamps(self, batch_id, start=None,
-                                                end=None, max_results=None):
-        """
-        List inbound message keys with timestamps for the given batch.
-        """
-        return self.riak_backend.list_batch_inbound_keys_with_timestamps(
-            batch_id, start=start, end=end, max_results=max_results)
-
-    def list_batch_outbound_keys_with_timestamps(self, batch_id, start=None,
-                                                 end=None, max_results=None):
-        """
-        List outbound message keys with timestamps for the given batch.
-        """
-        return self.riak_backend.list_batch_outbound_keys_with_timestamps(
-            batch_id, start=start, end=end, max_results=max_results)
-
-    def list_batch_inbound_keys_with_addresses(self, batch_id, start=None,
-                                               end=None, max_results=None):
+    def list_batch_inbound_messages(self, batch_id, start=None, end=None,
+                                    page_size=None):
         """
         List inbound message keys with timestamps and addresses in descending
         timestamp order for the given batch.
         """
-        return self.riak_backend.list_batch_inbound_keys_with_addresses(
-            batch_id, start=start, end=end, max_results=max_results)
+        return self.riak_backend.list_batch_inbound_messages(
+            batch_id, start=start, end=end, page_size=page_size)
 
-    def list_batch_outbound_keys_with_addresses(self, batch_id, start=None,
-                                                end=None, max_results=None):
+    def list_batch_outbound_messages(self, batch_id, start=None, end=None,
+                                     page_size=None):
         """
         List outbound message keys with timestamps and addresses in descending
         timestamp order for the given batch.
         """
-        return self.riak_backend.list_batch_outbound_keys_with_addresses(
-            batch_id, start=start, end=end, max_results=max_results)
+        return self.riak_backend.list_batch_outbound_messages(
+            batch_id, start=start, end=end, page_size=page_size)
 
-    def list_message_event_keys_with_statuses(self, message_id,
-                                              max_results=None):
+    def list_message_events(self, message_id, start=None, end=None,
+                            page_size=None):
         """
-        List event keys with timestamps and statuses for the given outbound
-        message.
+        List event keys with timestamps and statuses in ascending timestamp
+        order for the given outbound message.
         """
-        return self.riak_backend.list_message_event_keys_with_statuses(
-            message_id, max_results=max_results)
+        return self.riak_backend.list_message_events(
+            message_id, start=start, end=end, page_size=page_size)
 
     def list_batch_events(self, batch_id, start=None, end=None,
-                          max_results=None):
+                          page_size=None):
         """
-        List event keys with timestamps and statuses for the given outbound
-        message.
+        List event keys with timestamps and statuses in descending timestamp
+        order for the given batch.
         """
-        return self.riak_backend.list_batch_events(batch_id,
-                                                   start=start,
-                                                   end=end,
-                                                   max_results=max_results)
+        return self.riak_backend.list_batch_events(
+            batch_id, start=start, end=end, page_size=page_size)
 
     def get_batch_info_status(self, batch_id):
         """
