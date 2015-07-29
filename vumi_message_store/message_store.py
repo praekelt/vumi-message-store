@@ -211,22 +211,6 @@ class QueryMessageStore(object):
         """
         return self.batch_info_cache.get_batch_status(batch_id)
 
-    def list_batch_recent_inbound_keys(self, batch_id, with_timestamp=False):
-        """
-        Return the list of recent inbound message keys in descending order by
-        timestamp.
-        """
-        return self.batch_info_cache.list_inbound_message_keys(
-            batch_id, with_timestamp=with_timestamp)
-
-    def list_batch_recent_outbound_keys(self, batch_id, with_timestamp=False):
-        """
-        Return the list of recent outbound message keys in descending order by
-        timestamp.
-        """
-        return self.batch_info_cache.list_outbound_message_keys(
-            batch_id, with_timestamp=with_timestamp)
-
     def get_batch_inbound_count(self, batch_id):
         return self.batch_info_cache.get_inbound_message_count(batch_id)
 
