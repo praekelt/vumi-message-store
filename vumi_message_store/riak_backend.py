@@ -23,7 +23,7 @@ class MessageStoreRiakBackend(object):
     """
 
     # The Python Riak client defaults to max_results=1000 in places.
-    DEFAULT_MAX_RESULTS = 1000
+    DEFAULT_PAGE_SIZE = 1000
 
     def __init__(self, manager):
         self.manager = manager
@@ -202,68 +202,68 @@ class MessageStoreRiakBackend(object):
 
     @Manager.calls_manager
     def list_batch_inbound_messages(self, batch_id, start=None, end=None,
-                                    max_results=None):
+                                    page_size=None):
         """
         List inbound message keys with timestamps and addresses in descending
         timestamp order for the given batch.
         """
-        if max_results is None:
-            max_results = self.DEFAULT_MAX_RESULTS
+        if page_size is None:
+            page_size = self.DEFAULT_PAGE_SIZE
         start_range, end_range = (
             self._start_end_range_reverse(batch_id, start, end))
         results = yield self.inbound_messages.index_keys_page(
             'batches_with_addresses_reverse', start_range, end_range,
-            return_terms=True, max_results=max_results)
+            return_terms=True, max_results=page_size)
         returnValue(IndexPageWrapper(
             key_with_rts_and_value_formatter, self, batch_id, results))
 
     @Manager.calls_manager
     def list_batch_outbound_messages(self, batch_id, start=None, end=None,
-                                     max_results=None):
+                                     page_size=None):
         """
         List outbound message keys with timestamps and addresses in descending
         timestamp order for the given batch.
         """
-        if max_results is None:
-            max_results = self.DEFAULT_MAX_RESULTS
+        if page_size is None:
+            page_size = self.DEFAULT_PAGE_SIZE
         start_range, end_range = (
             self._start_end_range_reverse(batch_id, start, end))
         results = yield self.outbound_messages.index_keys_page(
             'batches_with_addresses_reverse', start_range, end_range,
-            return_terms=True, max_results=max_results)
+            return_terms=True, max_results=page_size)
         returnValue(IndexPageWrapper(
             key_with_rts_and_value_formatter, self, batch_id, results))
 
     @Manager.calls_manager
     def list_message_events(self, message_id, start=None, end=None,
-                            max_results=None):
+                            page_size=None):
         """
         List event keys with timestamps and statuses in ascending timestamp
         order for the given outbound message.
         """
-        if max_results is None:
-            max_results = self.DEFAULT_MAX_RESULTS
+        if page_size is None:
+            page_size = self.DEFAULT_PAGE_SIZE
         start_value, end_value = self._start_end_range(message_id, start, end)
         results = yield self.events.index_keys_page(
             'message_with_status', start_value, end_value, return_terms=True,
-            max_results=max_results)
+            max_results=page_size)
         returnValue(IndexPageWrapper(
             key_with_ts_and_value_formatter, self, message_id, results))
 
     @Manager.calls_manager
     def list_batch_events(self, batch_id, start=None, end=None,
-                          max_results=None):
+                          page_size=None):
         """
         List event keys with timestamps and statuses in descending timestamp
         order for the given batch.
         """
-        if max_results is None:
-            max_results = self.DEFAULT_MAX_RESULTS
+        if page_size is None:
+            page_size = self.DEFAULT_PAGE_SIZE
         start_range, end_range = (
             self._start_end_range_reverse(batch_id, start, end))
         results = yield self.events.index_keys_page(
             'batches_with_statuses_reverse', start_range, end_range,
-            return_terms=True, max_results=max_results)
+            return_terms=True, max_results=page_size)
         returnValue(IndexPageWrapper(
             key_with_rts_and_value_formatter, self, batch_id, results))
 
