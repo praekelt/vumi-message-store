@@ -268,8 +268,9 @@ class TestOperationalMessageStore(VumiTestCase):
             msg["message_id"])
         self.assertEqual(stored_msg.msg, msg)
         self.assertEqual(stored_msg.batches.keys(), ["mybatch"])
-        batch_keys = yield self.bi_cache.list_inbound_message_keys("mybatch")
-        self.assertEqual(set(batch_keys), set([msg["message_id"]]))
+        batch_keys_count = (
+            yield self.bi_cache.get_inbound_message_count("mybatch"))
+        self.assertEqual(batch_keys_count, 1)
 
     @inlineCallbacks
     def test_add_inbound_message_with_multiple_batch_ids(self):
@@ -288,10 +289,11 @@ class TestOperationalMessageStore(VumiTestCase):
         self.assertEqual(stored_msg.msg, msg)
         self.assertEqual(
             sorted(stored_msg.batches.keys()), ["mybatch", "yourbatch"])
-        mykeys = yield self.bi_cache.list_inbound_message_keys("mybatch")
-        self.assertEqual(mykeys, [msg["message_id"]])
-        yourkeys = yield self.bi_cache.list_inbound_message_keys("yourbatch")
-        self.assertEqual(yourkeys, [msg["message_id"]])
+        mykeys_count = yield self.bi_cache.get_inbound_message_count("mybatch")
+        self.assertEqual(mykeys_count, 1)
+        yourkeys_count = (
+            yield self.bi_cache.get_inbound_message_count("yourbatch"))
+        self.assertEqual(yourkeys_count, 1)
 
     @inlineCallbacks
     def test_add_inbound_message_to_new_batch(self):
@@ -309,10 +311,11 @@ class TestOperationalMessageStore(VumiTestCase):
         self.assertEqual(stored_msg.msg, msg)
         self.assertEqual(
             sorted(stored_msg.batches.keys()), ["mybatch", "yourbatch"])
-        mykeys = yield self.bi_cache.list_inbound_message_keys("mybatch")
-        self.assertEqual(mykeys, [msg["message_id"]])
-        yourkeys = yield self.bi_cache.list_inbound_message_keys("yourbatch")
-        self.assertEqual(yourkeys, [msg["message_id"]])
+        mykeys_count = yield self.bi_cache.get_inbound_message_count("mybatch")
+        self.assertEqual(mykeys_count, 1)
+        yourkeys_count = (
+            yield self.bi_cache.get_inbound_message_count("yourbatch"))
+        self.assertEqual(yourkeys_count, 1)
 
     @inlineCallbacks
     def test_get_inbound_message(self):
@@ -382,8 +385,9 @@ class TestOperationalMessageStore(VumiTestCase):
             msg["message_id"])
         self.assertEqual(stored_msg.msg, msg)
         self.assertEqual(stored_msg.batches.keys(), ["mybatch"])
-        batch_keys = yield self.bi_cache.list_outbound_message_keys("mybatch")
-        self.assertEqual(batch_keys, [msg["message_id"]])
+        batch_keys_count = (
+            yield self.bi_cache.get_outbound_message_count("mybatch"))
+        self.assertEqual(batch_keys_count, 1)
 
     @inlineCallbacks
     def test_add_outbound_message_with_multiple_batch_ids(self):
@@ -402,10 +406,12 @@ class TestOperationalMessageStore(VumiTestCase):
         self.assertEqual(stored_msg.msg, msg)
         self.assertEqual(
             sorted(stored_msg.batches.keys()), ["mybatch", "yourbatch"])
-        mykeys = yield self.bi_cache.list_outbound_message_keys("mybatch")
-        self.assertEqual(mykeys, [msg["message_id"]])
-        yourkeys = yield self.bi_cache.list_outbound_message_keys("yourbatch")
-        self.assertEqual(yourkeys, [msg["message_id"]])
+        mykeys_count = (
+            yield self.bi_cache.get_outbound_message_count("mybatch"))
+        self.assertEqual(mykeys_count, 1)
+        yourkeys_count = (
+            yield self.bi_cache.get_outbound_message_count("yourbatch"))
+        self.assertEqual(yourkeys_count, 1)
 
     @inlineCallbacks
     def test_add_outbound_message_to_new_batch(self):
@@ -423,10 +429,12 @@ class TestOperationalMessageStore(VumiTestCase):
         self.assertEqual(stored_msg.msg, msg)
         self.assertEqual(
             sorted(stored_msg.batches.keys()), ["mybatch", "yourbatch"])
-        mykeys = yield self.bi_cache.list_outbound_message_keys("mybatch")
-        self.assertEqual(mykeys, [msg["message_id"]])
-        yourkeys = yield self.bi_cache.list_outbound_message_keys("yourbatch")
-        self.assertEqual(yourkeys, [msg["message_id"]])
+        mykeys_count = (
+            yield self.bi_cache.get_outbound_message_count("mybatch"))
+        self.assertEqual(mykeys_count, 1)
+        yourkeys_count = (
+            yield self.bi_cache.get_outbound_message_count("yourbatch"))
+        self.assertEqual(yourkeys_count, 1)
 
     @inlineCallbacks
     def test_get_outbound_message(self):
@@ -506,8 +514,8 @@ class TestOperationalMessageStore(VumiTestCase):
         stored_event = yield self.backend.get_raw_event(ack["event_id"])
         self.assertEqual(stored_event.event, ack)
         self.assertEqual(stored_event.batches.keys(), ["mybatch"])
-        batch_keys = yield self.bi_cache.list_event_keys("mybatch")
-        self.assertEqual(batch_keys, [ack["event_id"]])
+        batch_keys_count = yield self.bi_cache.get_event_count("mybatch")
+        self.assertEqual(batch_keys_count, 1)
 
     @inlineCallbacks
     def test_add_ack_event_with_multiple_batch_ids(self):
@@ -524,10 +532,10 @@ class TestOperationalMessageStore(VumiTestCase):
         self.assertEqual(stored_event.event, ack)
         self.assertEqual(
             sorted(stored_event.batches.keys()), ["mybatch", "yourbatch"])
-        mykeys = yield self.bi_cache.list_event_keys("mybatch")
-        self.assertEqual(mykeys, [ack["event_id"]])
-        yourkeys = yield self.bi_cache.list_event_keys("yourbatch")
-        self.assertEqual(yourkeys, [ack["event_id"]])
+        mykeys_count = yield self.bi_cache.get_event_count("mybatch")
+        self.assertEqual(mykeys_count, 1)
+        yourkeys_count = yield self.bi_cache.get_event_count("yourbatch")
+        self.assertEqual(yourkeys_count, 1)
 
     @inlineCallbacks
     def test_add_ack_event_to_new_batch(self):
@@ -545,10 +553,10 @@ class TestOperationalMessageStore(VumiTestCase):
         self.assertEqual(stored_event.event, ack)
         self.assertEqual(
             sorted(stored_event.batches.keys()), ["mybatch", "yourbatch"])
-        mykeys = yield self.bi_cache.list_event_keys("mybatch")
-        self.assertEqual(mykeys, [ack["event_id"]])
-        yourkeys = yield self.bi_cache.list_event_keys("yourbatch")
-        self.assertEqual(yourkeys, [ack["event_id"]])
+        mykeys_count = yield self.bi_cache.get_event_count("mybatch")
+        self.assertEqual(mykeys_count, 1)
+        yourkeys_count = yield self.bi_cache.get_event_count("yourbatch")
+        self.assertEqual(yourkeys_count, 1)
 
     @inlineCallbacks
     def test_get_event(self):
