@@ -1044,15 +1044,12 @@ class TestRiakBackendUtils(VumiTestCase):
         expected for the given batch ID, an error is thrown.
         """
         result = ("mybatch$20150730T11:03$apples", "key")
-        try:
-            key_with_ts_and_value_formatter("yourbatch", result)
-        except ValueError as e:
-            self.assertEqual(
-                str(e),
-                "Index value 'mybatch$20150730T11:03$apples' does not begin " +
-                "with expected prefix 'yourbatch$'.")
-        else:
-            self.fail()
+        exception = self.assertRaises(
+            ValueError, key_with_ts_and_value_formatter, "yourbatch", result)
+        self.assertEqual(
+            str(exception),
+            "Index value 'mybatch$20150730T11:03$apples' does not begin " +
+            "with expected prefix 'yourbatch$'.")
 
     def test_formatter_malformed_index_value(self):
         """
@@ -1060,12 +1057,9 @@ class TestRiakBackendUtils(VumiTestCase):
         separated by the correct delimiter, an error is thrown.
         """
         result = ("mybatch$20150730T11:03-apples", "key")
-        try:
-            key_with_ts_and_value_formatter("mybatch", result)
-        except ValueError as e:
-            self.assertEqual(
-                str(e),
-                "Index value 'mybatch$20150730T11:03-apples' does not match " +
-                "expected format.")
-        else:
-            self.fail()
+        exception = self.assertRaises(
+            ValueError, key_with_ts_and_value_formatter, "mybatch", result)
+        self.assertEqual(
+            str(exception),
+            "Index value 'mybatch$20150730T11:03-apples' does not match " +
+            "expected format.")
