@@ -320,40 +320,6 @@ class IQueryMessageStore(Interface):
             If async, a Deferred is returned instead.
         """
 
-    def list_batch_recent_inbound_keys(batch_id, with_timestamp=False):
-        """
-        Return the list of recent inbound message keys in descending order by
-        timestamp.
-
-        :param batch_id:
-            The batch identifier for the batch to operate on.
-
-        :param bool with_timestamp:
-            If set to ``True``, timestamps will be included in the result.
-
-        :returns:
-            A list of message keys (the default) or (key, timestamp) tuples (if
-            ``with_timestamp`` is set to ``True``).
-            If async, a Deferred is returned instead.
-        """
-
-    def list_batch_recent_outbound_keys(batch_id, with_timestamp=False):
-        """
-        Return the list of recent outbound message keys in descending order by
-        timestamp.
-
-        :param batch_id:
-            The batch identifier for the batch to operate on.
-
-        :param bool with_timestamp:
-            If set to ``True``, timestamps will be included in the result.
-
-        :returns:
-            A list of message keys (the default) or (key, timestamp) tuples (if
-            ``with_timestamp`` is set to ``True``).
-            If async, a Deferred is returned instead.
-        """
-
     def get_batch_inbound_count(batch_id):
         """
         Return the count of inbound messages.

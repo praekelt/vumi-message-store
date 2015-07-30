@@ -290,32 +290,6 @@ class BatchInfoCache(object):
         stats = yield self.redis.hgetall(self.status_key(batch_id))
         returnValue(dict([(k, int(v)) for k, v in stats.iteritems()]))
 
-    def list_inbound_message_keys(self, batch_id, with_timestamp=False):
-        """
-        Return the list of recent inbound message keys in descending order by
-        timestamp.
-        """
-        return self.redis.zrange(
-            self.inbound_key(batch_id), 0, -1, desc=True,
-            withscores=with_timestamp)
-
-    def list_outbound_message_keys(self, batch_id, with_timestamp=False):
-        """
-        Return the list of recent outbound message keys in descending order by
-        timestamp.
-        """
-        return self.redis.zrange(
-            self.outbound_key(batch_id), 0, -1, desc=True,
-            withscores=with_timestamp)
-
-    def list_event_keys(self, batch_id, with_timestamp=False):
-        """
-        Return the list of recent event keys in descending order by timestamp.
-        """
-        return self.redis.zrange(
-            self.event_key(batch_id), 0, -1, desc=True,
-            withscores=with_timestamp)
-
     @Manager.calls_manager
     def _get_counter_value(self, counter_key):
         count = yield self.redis.get(counter_key)
