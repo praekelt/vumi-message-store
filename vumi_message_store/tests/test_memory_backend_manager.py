@@ -36,3 +36,50 @@ class TestFakeRiakState(VumiTestCase):
         index = bucket["indexes"]["index_key"]
         object1_index_values = [(v, k) for v, k in index if k == object1.key]
         self.assertEqual(object1_index_values, [])
+
+class TestFakeRiakObject(VumiTestCase):
+
+    def setUp(self):
+        self.state = FakeRiakState(is_sync=False)
+        self.add_cleanup(self.state.teardown)
+
+    def test_removing_none_index_removes_all_indexes(self):
+        """
+        When an index is removed from an object but no index name is provided,
+        all indexes for the object are removed.
+        """
+        bucket = self.state._get_bucket("bucket")
+
+        # Add an object with two indexes
+        object1 = FakeRiakObject(self.state, "bucket", "mykey")
+        object1.add_index("index_key", "index_value")
+        object1.add_index("index_key2", "index_value")
+
+        self.assertEqual(
+            object1.get_indexes(),
+            set([("index_key", "index_value"), ("index_key2", "index_value")]))
+
+        object1.remove_index(None)
+
+        self.assertEqual(object1.get_indexes(), set())
+
+    def test_removing_specific_index_value_removes_value(self):
+        """
+        When an index is removed from an object and both the index name and an
+        index value are provided, only the given index value is removed.
+        """
+        bucket = self.state._get_bucket("bucket")
+
+        # Add an object with one index with two values
+        object1 = FakeRiakObject(self.state, "bucket", "mykey")
+        object1.add_index("index_key", "index_value")
+        object1.add_index("index_key", "index_value2")
+
+        self.assertEqual(
+            object1.get_indexes(),
+            set([("index_key", "index_value"), ("index_key", "index_value2")]))
+
+        object1.remove_index("index_key", index_value="index_value")
+
+        self.assertEqual(object1.get_indexes(),
+                         set([("index_key", "index_value2")]))
