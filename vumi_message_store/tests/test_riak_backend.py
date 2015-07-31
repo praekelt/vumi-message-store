@@ -12,7 +12,8 @@ from vumi_message_store.memory_backend_manager import (
 from vumi_message_store.models import (
     to_reverse_timestamp,
     Batch, CurrentTag, InboundMessage, OutboundMessage, Event)
-from vumi_message_store.riak_backend import MessageStoreRiakBackend
+from vumi_message_store.riak_backend import (
+    MessageStoreRiakBackend, key_with_ts_and_value_formatter)
 from vumi_message_store.tests.helpers import MessageSequenceHelper
 
 
@@ -1034,3 +1035,31 @@ class TestMessageStoreRiakBackendInMemorySync(RiakBackendTestMixin,
         self.state = FakeRiakState(is_sync=True)
         self.add_cleanup(self.state.teardown)
         self.set_up_tests(FakeMemoryRiakManager(self.state))
+
+
+class TestRiakBackendUtils(VumiTestCase):
+    def test_formatter_mismatched_batch_id(self):
+        """
+        When the index value passed to the formatter doesn't match what is
+        expected for the given batch ID, an error is thrown.
+        """
+        result = ("mybatch$20150730T11:03$apples", "key")
+        exception = self.assertRaises(
+            ValueError, key_with_ts_and_value_formatter, "yourbatch", result)
+        self.assertEqual(
+            str(exception),
+            "Index value 'mybatch$20150730T11:03$apples' does not begin " +
+            "with expected prefix 'yourbatch$'.")
+
+    def test_formatter_malformed_index_value(self):
+        """
+        When the index value passed to the formatter doesn't contain 3 strings
+        separated by the correct delimiter, an error is thrown.
+        """
+        result = ("mybatch$20150730T11:03-apples", "key")
+        exception = self.assertRaises(
+            ValueError, key_with_ts_and_value_formatter, "mybatch", result)
+        self.assertEqual(
+            str(exception),
+            "Index value 'mybatch$20150730T11:03-apples' does not match " +
+            "expected format.")
